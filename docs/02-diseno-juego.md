@@ -220,6 +220,8 @@ src/
 |---|---|---|
 | **F1 — Núcleo jugable** | Arena, física completa (manejo, paredes, salto, flips, aéreos, derrape, turbo, supersónico, demoliciones), pelota, pads, goles, kickoff, reloj, HUD, cámara de pelota/auto, teclado y mando, bots 1v1/2v2/3v3, repetición de gol, audio sintetizado | ✅ |
 | **F1.5 — Realismo** | Estadio realista de día y de noche, autos con carrocería esculpida y pintura con barniz, césped natural, pelota clásica, humo del turbo, flip reset | ✅ |
+| **F1.6 — Realismo II** | Cielos HDRI fotográficos (CC0), público 3D animado (~20.000), gradas escalonadas, techo con cerchas, reflejos capturados del estadio, GTAO, MSAA, gradación de color, sombras de contacto, marcas de neumáticos | ✅ |
+| F1.7 — Assets de artista 🔧 | Modelos 3D de autos hechos por un artista o generados con IA (mismas hitboxes), sonido grabado (público, motor, bocina) | Pendiente de recursos |
 | F2 — Entrenamiento y clips | Packs de entrenamiento + editor + códigos, guardar clips (IndexedDB) y exportar, visor de repeticiones, ajustes de cámara/controles/gráficos, tutorial | Próxima |
 | F3 — Online casual | Servidor autoritativo, salas con código, predicción/rollback, chat rápido | |
 | F4 — Competitivo | Cuentas, matchmaking, MMR Glicko-2, rangos, temporadas, estadísticas | |

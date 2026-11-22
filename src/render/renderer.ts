@@ -5,7 +5,9 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { arenaRaycast } from '../sim/arena.ts';
 import { BALL, CAR_BODIES } from '../sim/constants.ts';
 import { V3 } from '../sim/math.ts';
@@ -13,11 +15,29 @@ import type { GameEvent, Snapshot } from '../sim/world.ts';
 import { buildArenaSurface, buildFloor, buildGoals, wallMaterial } from './arenaMesh.ts';
 import { CameraController, type CameraSettings } from './camera.ts';
 import { buildCar, type CarVisual } from './carMesh.ts';
-import { BallVisual, buildPads, Particles, type PadVisual } from './effects.ts';
+import { BallVisual, buildPads, ContactShadows, Particles, SkidMarks, type PadVisual } from './effects.ts';
 import { BOOST_COLOR, TEAM_COLORS, TEAM_COLORS_LIGHT } from './palette.ts';
 import { buildDaySky, buildNightSky, Stadium, type Theme } from './stadium.ts';
 
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
+
+/** Gradación de color: contraste suave, saturación y viñeta (look de transmisión deportiva). */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.28 }, uSat: { value: 1.08 }, uContrast: { value: 1.06 } },
+  vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse; uniform float uVignette; uniform float uSat; uniform float uContrast; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      c.rgb = mix(vec3(l), c.rgb, uSat);
+      c.rgb = (c.rgb - 0.18) * uContrast + 0.18;
+      c.rgb = max(c.rgb, 0.0);
+      vec2 d = vUv - 0.5;
+      c.rgb *= 1.0 - uVignette * dot(d, d) * 2.2;
+      gl_FragColor = c;
+    }`,
+};
 
 export interface CarInfo { id: number; team: number; bodyIndex: number; name: string }
 
@@ -37,6 +57,12 @@ export class GameRenderer {
   private envGroup = new THREE.Group();
   private pmrem: THREE.PMREMGenerator;
   private envTex: THREE.Texture | null = null;
+  private hdrCache = new Map<Theme, THREE.DataTexture>();
+  private sun!: THREE.DirectionalLight;
+  private sunDir = new THREE.Vector3(0, 0, 1);
+  private skids = new SkidMarks();
+  private contact = new ContactShadows(8);
+  private lastWheels = new Map<number, THREE.Vector3[]>();
   private ball = new BallVisual();
   private cars = new Map<number, CarVisual & { team: number; name: string }>();
   private pads: PadVisual[] = [];
@@ -79,7 +105,7 @@ export class GameRenderer {
     this.pads = buildPads(padGroup);
     this.scene.add(padGroup);
     this.scene.add(this.ball.group, this.ball.shadow);
-    this.scene.add(this.smoke.points, this.particles.points);
+    this.scene.add(this.smoke.points, this.particles.points, this.skids.mesh, this.contact.mesh);
 
     this.setTheme(theme);
     this.setupComposer();
@@ -93,68 +119,119 @@ export class GameRenderer {
     this.scene.remove(this.envGroup);
     this.envGroup = new THREE.Group();
     this.scene.add(this.envGroup);
-    this.envTex?.dispose();
     const g = this.envGroup;
     const day = theme === 'dia';
 
+    // Cielo provisorio (procedural) mientras carga el HDRI fotográfico
     if (day) {
       const el = (40 * Math.PI) / 180, az = (35 * Math.PI) / 180;
-      const sunDir = new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el));
-      const sky = buildDaySky(sunDir);
-      this.sky = sky;
-      g.add(sky);
-      // Reflejos del cielo real en la pintura y el vidrio
-      const envScene = new THREE.Scene();
-      const skyEnv = buildDaySky(sunDir);
-      skyEnv.scale.setScalar(1000);
-      envScene.add(skyEnv);
-      const grass = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), new THREE.MeshBasicMaterial({ color: '#3a5a2c' }));
-      grass.position.z = -200;
-      envScene.add(grass);
-      this.envTex = this.pmrem.fromScene(envScene, 0.02, 1, 5000).texture;
-      this.scene.environment = this.envTex;
-      this.scene.environmentIntensity = 0.38;
+      this.sunDir.set(Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el));
+      this.sky = buildDaySky(this.sunDir);
       this.scene.background = null;
-      this.scene.fog = new THREE.Fog('#c3d4e4', 30000, 160000);
-      this.renderer.toneMappingExposure = 0.8;
-      g.add(new THREE.HemisphereLight('#d6e8ff', '#4e6b3d', 0.75));
-      const sun = new THREE.DirectionalLight('#fff1dc', 2.6);
-      sun.position.copy(sunDir).multiplyScalar(10000);
-      this.setupShadow(sun);
-      g.add(sun, sun.target);
+      this.scene.fog = new THREE.Fog('#c9d8e6', 40000, 200000);
+      this.renderer.toneMappingExposure = 0.85;
+      g.add(new THREE.HemisphereLight('#d6e8ff', '#4e6b3d', 0.7));
+      this.sun = new THREE.DirectionalLight('#fff1dc', 2.7);
+      this.sun.position.copy(this.sunDir).multiplyScalar(12000);
+      this.setupShadow(this.sun);
+      g.add(this.sun, this.sun.target);
       this.wallMat.uniforms.uSky.value.set('#a9c8e8');
-      this.wallMat.uniforms.uSunDir.value.copy(sunDir);
       this.wallMat.uniforms.uBoard.value.set('#1f2b3d');
     } else {
       this.sky = buildNightSky();
-      g.add(this.sky);
-      this.envTex = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-      this.scene.environment = this.envTex;
-      this.scene.environmentIntensity = 0.45;
       this.scene.background = new THREE.Color('#02060d');
-      this.scene.fog = new THREE.Fog('#070d18', 20000, 90000);
+      this.scene.fog = new THREE.Fog('#070d18', 30000, 150000);
       this.renderer.toneMappingExposure = 1.0;
-      g.add(new THREE.HemisphereLight('#9cb8e0', '#1c2a20', 0.7));
-      const top = new THREE.DirectionalLight('#f2f7ff', 2.3);
-      top.position.set(400, 700, 9000);
-      this.setupShadow(top);
-      g.add(top, top.target);
+      g.add(new THREE.HemisphereLight('#9cb8e0', '#1c2a20', 0.65));
+      this.sunDir.set(0.05, 0.08, 1).normalize();
+      this.sun = new THREE.DirectionalLight('#f2f7ff', 2.4);
+      this.sun.position.set(400, 700, 12000);
+      this.setupShadow(this.sun);
+      g.add(this.sun, this.sun.target);
       for (const [x, y] of [[7000, 8000], [-7000, -8000], [-7000, 8000], [7000, -8000]] as const) {
         const l = new THREE.DirectionalLight('#e6f0ff', 0.55);
         l.position.set(x, y, 5000);
         g.add(l);
       }
       this.wallMat.uniforms.uSky.value.set('#2a3e5c');
-      this.wallMat.uniforms.uSunDir.value.set(0.05, 0.08, 1).normalize();
       this.wallMat.uniforms.uBoard.value.set('#141c28');
     }
+    this.wallMat.uniforms.uSunDir.value.copy(this.sunDir);
+    g.add(this.sky);
     this.stadium = new Stadium(theme);
     g.add(this.stadium.group);
     if (this.bloom) {
-      this.bloom.strength = day ? 0.18 : 0.55;
+      this.bloom.strength = day ? 0.18 : 0.5;
       this.bloom.radius = day ? 0.25 : 0.5;
-      this.bloom.threshold = day ? 4.0 : 0.82;
+      this.bloom.threshold = day ? 4.0 : 0.85;
     }
+    this.captureEnvironment();
+    void this.loadSky(theme);
+  }
+
+  /** Carga el cielo HDRI (CC0, Poly Haven), ubica el sol donde está en la foto y recaptura los reflejos. */
+  private async loadSky(theme: Theme) {
+    let tex = this.hdrCache.get(theme);
+    if (!tex) {
+      try {
+        const loader = new HDRLoader().setDataType(THREE.FloatType);
+        tex = await loader.loadAsync(`${import.meta.env.BASE_URL}assets/hdri/${theme === 'dia' ? 'cielo_dia' : 'cielo_noche'}.hdr`);
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        this.hdrCache.set(theme, tex);
+      } catch (e) {
+        console.warn('No se pudo cargar el cielo HDRI; se usa el procedural.', e);
+        return;
+      }
+    }
+    if (this.theme !== theme) return;
+    // Dirección del sol en la foto (píxel más brillante) → orientación del cielo para que el sol quede a 35° de azimut
+    let yaw = 0;
+    if (theme === 'dia') {
+      const img = tex.image as { data: Float32Array; width: number; height: number };
+      let best = -1, bi = 0;
+      for (let i = 0; i < img.width * img.height; i++) {
+        const l = img.data[i * 4] + img.data[i * 4 + 1] + img.data[i * 4 + 2];
+        if (l > best) { best = l; bi = i; }
+      }
+      const px = bi % img.width, py = Math.floor(bi / img.width);
+      const u = (px + 0.5) / img.width, v = 1 - (py + 0.5) / img.height;
+      const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
+      // Dirección en el marco Y-arriba del HDRI → nuestro mundo Z-arriba (rotación X +90°)
+      const dy = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
+      const w0 = new THREE.Vector3(dy.x, -dy.z, dy.y);
+      yaw = (35 * Math.PI) / 180 - Math.atan2(w0.y, w0.x);
+      this.sunDir.copy(w0).applyAxisAngle(new THREE.Vector3(0, 0, 1), yaw).normalize();
+      if (this.sunDir.z < 0.35) { this.sunDir.z = 0.35; this.sunDir.normalize(); }
+      this.sun.position.copy(this.sunDir).multiplyScalar(12000);
+      this.wallMat.uniforms.uSunDir.value.copy(this.sunDir);
+    }
+    this.scene.background = tex;
+    this.scene.backgroundRotation.set(Math.PI / 2, 0, yaw, 'ZXY');
+    this.scene.backgroundIntensity = theme === 'dia' ? 0.55 : 1.6;
+    if (this.sky) { this.envGroup.remove(this.sky); this.sky = null; }
+    this.captureEnvironment();
+  }
+
+  /** Reflejos reales: fotografía cúbica del estadio desde el centro de la cancha (sin autos ni pelota). */
+  captureEnvironment() {
+    const hidden: THREE.Object3D[] = [this.ball.group, this.ball.shadow, this.particles.points, this.smoke.points, this.skids.mesh];
+    for (const v of this.cars.values()) hidden.push(v.group);
+    const prev = hidden.map((o) => o.visible);
+    hidden.forEach((o) => (o.visible = false));
+    const rt = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType });
+    const cube = new THREE.CubeCamera(10, 300000, rt);
+    cube.position.set(0, 0, 700);
+    const env = this.scene.environment;
+    this.scene.environment = null;
+    cube.update(this.renderer, this.scene);
+    this.scene.environment = env;
+    hidden.forEach((o, i) => (o.visible = prev[i]));
+    const pm = this.pmrem.fromCubemap(rt.texture);
+    rt.dispose();
+    this.envTex?.dispose();
+    this.envTex = pm.texture;
+    this.scene.environment = this.envTex;
+    this.scene.environmentIntensity = this.theme === 'dia' ? 0.7 : 0.9;
   }
 
   private setupShadow(l: THREE.DirectionalLight) {
@@ -162,19 +239,40 @@ export class GameRenderer {
     l.castShadow = true;
     l.shadow.mapSize.set(4096, 4096);
     const sc = l.shadow.camera;
-    sc.left = -7600; sc.right = 7600; sc.top = 7600; sc.bottom = -7600; sc.near = 2000; sc.far = 22000;
+    sc.left = -7600; sc.right = 7600; sc.top = 7600; sc.bottom = -7600; sc.near = 2000; sc.far = 26000;
     l.shadow.bias = -0.0005;
     l.shadow.normalBias = 3;
   }
 
   private setupComposer() {
-    if (this.quality !== 'alta') { this.composer = null; return; }
-    const size = this.renderer.getSize(new THREE.Vector2());
-    this.composer = new EffectComposer(this.renderer);
+    if (this.quality !== 'alta') { this.composer = null; this.bloom = null; return; }
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    // Antialiasing real (MSAA x4) dentro del pipeline de post-proceso
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // Oclusión ambiental (sombras de contacto en rincones, bajo los autos y en las gradas)
+    const ao = new GTAOPass(this.scene, this.camera, size.x, size.y);
+    ao.updateGtaoMaterial({ radius: 90, distanceExponent: 1.2, thickness: 30, scale: 1.1, samples: 12 });
+    ao.blendIntensity = 0.85;
+    // No calcular oclusión sobre sprites ni materiales transparentes (brillos, sombras, vidrio, redes)
+    const aoAny = ao as unknown as { _overrideVisibility: () => void; _visibilityCache: THREE.Object3D[]; scene: THREE.Scene };
+    aoAny._overrideVisibility = function () {
+      const cache = this._visibilityCache;
+      this.scene.traverse((o) => {
+        const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        const transp = !!mat && !Array.isArray(mat) && mat.transparent;
+        if (o.visible && ((o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite || transp)) {
+          o.visible = false;
+          cache.push(o);
+        }
+      });
+    };
+    this.composer.addPass(ao);
     const day = this.theme === 'dia';
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), day ? 0.18 : 0.55, day ? 0.25 : 0.5, day ? 4.0 : 0.82);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), day ? 0.18 : 0.5, day ? 0.25 : 0.5, day ? 4.0 : 0.85);
     this.composer.addPass(this.bloom);
+    this.composer.addPass(new ShaderPass(GradeShader));
     this.composer.addPass(new OutputPass());
   }
 
@@ -196,6 +294,8 @@ export class GameRenderer {
   }
 
   setupCars(cars: CarInfo[], localId: number) {
+    this.skids.clear();
+    this.lastWheels.clear();
     for (const v of this.cars.values()) { this.scene.remove(v.group); v.nameplate?.remove(); }
     this.cars.clear();
     this.localId = localId;
@@ -223,6 +323,7 @@ export class GameRenderer {
         this.flash.color.copy(tc);
         this.flash.intensity = 40;
         this.camCtl.shake(60);
+        this.stadium.cheer(1);
         break;
       }
       case 'demo': {
@@ -259,7 +360,7 @@ export class GameRenderer {
     const su = (this.sky?.material as THREE.ShaderMaterial | undefined)?.uniforms;
     if (su?.uTime) su.uTime.value = this.time;
     if (su?.time) su.time.value = this.time;
-    this.stadium.update(this.time);
+    this.stadium.update(this.time, dt);
     this.wallMat.uniforms.uTime.value = this.time;
     this.flash.intensity *= Math.exp(-dt * 4);
 
@@ -290,12 +391,13 @@ export class GameRenderer {
     }
 
     // Autos
+    let shadowIdx = 0;
     for (const cs of snap.cars) {
       const v = this.cars.get(cs.id);
       if (!v) continue;
       v.group.visible = !cs.demoed;
       if (v.nameplate) v.nameplate.style.display = cs.demoed || mode === 'menu' ? 'none' : '';
-      if (cs.demoed) continue;
+      if (cs.demoed) { this.lastWheels.delete(cs.id); continue; }
       v.group.position.set(cs.x, cs.y, cs.z);
       v.group.quaternion.set(cs.qx, cs.qy, cs.qz, cs.qw);
       const q = v.group.quaternion;
@@ -306,6 +408,29 @@ export class GameRenderer {
         spin.rotation.y += (speedF / v.wheelRadius) * dt;
       }
       for (const w of v.frontWheels) w.rotation.z = -cs.steer * 0.45;
+      // Luces de freno
+      const braking = (cs.throttle < -0.1 && speedF > 50) || (cs.throttle > 0.1 && speedF < -50);
+      v.brakeLights.color.set(braking ? '#ff2a3d' : '#7a0a18');
+      // Sombra de contacto
+      const up = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      const ground = arenaRaycast(new V3(cs.x, cs.y, cs.z), new V3(0, 0, -1), 900);
+      const yawC = Math.atan2(fwd.y, fwd.x);
+      if (ground && up.z > 0.3) {
+        const h = Math.max(0, cs.z - 17 - ground.point.z);
+        this.contact.set(shadowIdx++, true, ground.point.x, ground.point.y, ground.point.z, ground.normal.x, ground.normal.y, ground.normal.z, yawC, 120, 85, h);
+      }
+      // Marcas de neumáticos al derrapar o patinar de costado
+      const vel = new THREE.Vector3(cs.vx, cs.vy, cs.vz);
+      const right = new THREE.Vector3(fwd.y, -fwd.x, 0).normalize();
+      const lateral = Math.abs(vel.dot(right));
+      const skid = cs.onGround && up.z > 0.9 && vel.length() > 250 && (cs.handbrake > 0.35 || lateral > 380);
+      const prev = this.lastWheels.get(cs.id);
+      if (skid) {
+        v.group.updateMatrixWorld();
+        const rears = v.wheels.slice(2).map((w) => w.getWorldPosition(new THREE.Vector3()));
+        if (prev) rears.forEach((p, k) => this.skids.add(prev[k].x, prev[k].y, p.x, p.y, 0, 13));
+        this.lastWheels.set(cs.id, rears);
+      } else this.lastWheels.delete(cs.id);
       // Turbo
       v.flame.visible = cs.boosting;
       if (cs.boosting) {
@@ -338,6 +463,8 @@ export class GameRenderer {
         if (vis) v.nameplate.style.transform = `translate(${((p.x + 1) / 2) * window.innerWidth}px, ${((1 - p.y) / 2) * window.innerHeight}px) translate(-50%, -100%)`;
       }
     }
+
+    for (let i = shadowIdx; i < 8; i++) this.contact.set(i, false);
 
     // Pads
     snap.pads.forEach((on, i) => {

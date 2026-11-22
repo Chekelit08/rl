@@ -193,16 +193,16 @@ export interface PadVisual { obj: THREE.Object3D; core: THREE.Object3D; big: boo
 
 export function buildPads(group: THREE.Group): PadVisual[] {
   const pads: PadVisual[] = [];
-  const ringMat = new THREE.MeshStandardMaterial({ color: '#2a3140', metalness: 0.7, roughness: 0.3 });
+  const ringMat = new THREE.MeshStandardMaterial({ color: '#8b939e', metalness: 0.5, roughness: 0.35 });
   const coreMat = () => new THREE.MeshBasicMaterial({ color: BOOST_COLOR, transparent: true, opacity: 0.95 });
   const all: [number, number, boolean][] = [...BIG_PADS.map(([x, y]) => [x, y, true] as [number, number, boolean]), ...SMALL_PADS.map(([x, y]) => [x, y, false] as [number, number, boolean])];
   for (const [x, y, big] of all) {
     const obj = new THREE.Group();
     obj.position.set(x, y, 0);
     const r = big ? 150 : 75;
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.08, 8, 24), ringMat);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, 4, 24), ringMat);
     base.rotation.x = Math.PI / 2;
-    base.position.z = 4;
+    base.position.z = 2;
     base.receiveShadow = true;
     obj.add(base);
     let core: THREE.Object3D;
@@ -224,4 +224,71 @@ export function buildPads(group: THREE.Group): PadVisual[] {
     pads.push({ obj, core, big, on: 1 });
   }
   return pads;
+}
+
+/** Sombra de contacto suave bajo cada auto (lo "apoya" en el piso). */
+export class ContactShadows {
+  mesh = new THREE.Group();
+  private items: THREE.Mesh[] = [];
+  constructor(n: number) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const g = cv.getContext('2d')!;
+    const grd = g.createRadialGradient(64, 64, 6, 64, 64, 64);
+    grd.addColorStop(0, 'rgba(0,0,0,0.85)');
+    grd.addColorStop(0.55, 'rgba(0,0,0,0.45)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(cv);
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.8 }));
+      m.renderOrder = 1;
+      m.visible = false;
+      this.items.push(m);
+      this.mesh.add(m);
+    }
+  }
+  /** Ubica la sombra i sobre la superficie (punto, normal) con el tamaño y el rumbo del auto. */
+  set(i: number, visible: boolean, px = 0, py = 0, pz = 0, nx = 0, ny = 0, nz = 1, yaw = 0, len = 120, wid = 85, height = 0) {
+    const m = this.items[i];
+    if (!m) return;
+    m.visible = visible;
+    if (!visible) return;
+    m.position.set(px + nx * 1.5, py + ny * 1.5, pz + nz * 1.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(nx, ny, nz));
+    m.rotateZ(yaw);
+    const s = 1 + height / 400;
+    m.scale.set(len * 1.35 * s, wid * 1.5 * s, 1);
+    (m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.85 - height / 500);
+  }
+}
+
+/** Marcas de neumáticos (derrapes y frenadas) en un buffer circular instanciado. */
+export class SkidMarks {
+  mesh: THREE.InstancedMesh;
+  private next = 0;
+  private count = 0;
+  private readonly max = 4000;
+  private m = new THREE.Matrix4();
+  constructor() {
+    const mat = new THREE.MeshBasicMaterial({ color: '#0d120c', transparent: true, opacity: 0.42, depthWrite: false });
+    this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), mat, this.max);
+    this.mesh.count = 0;
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 1;
+  }
+  add(ax: number, ay: number, bx: number, by: number, z: number, width: number) {
+    const dx = bx - ax, dy = by - ay;
+    const len = Math.hypot(dx, dy);
+    if (len < 2) return;
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.atan2(dy, dx));
+    this.m.compose(new THREE.Vector3((ax + bx) / 2, (ay + by) / 2, z + 0.8), q, new THREE.Vector3(len + 2, width, 1));
+    this.mesh.setMatrixAt(this.next, this.m);
+    this.next = (this.next + 1) % this.max;
+    this.count = Math.min(this.max, this.count + 1);
+    this.mesh.count = this.count;
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+  clear() { this.count = 0; this.next = 0; this.mesh.count = 0; }
 }

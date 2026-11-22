@@ -15,7 +15,15 @@ Build de producción: `npm run build` (sale en `dist/`, es estático y se puede 
 ## Qué hay en esta versión (Fase 1)
 
 - **Arena** de medidas estándar del género, modelada como SDF. Incluye rampas curvas, esquinas achaflanadas, arcos con red y postes redondeados.
-- **Estadio realista** de día (cielo físico con sol y nubes) o de noche (reflectores), con tribunas, público, techo, carteles LED y pantallas.
+- **Estadio realista:**
+  - cielo fotográfico HDRI de día o de noche (CC0); el sol se ubica donde está en la foto;
+  - gradas escalonadas con butacas y ~20.000 espectadores 3D que festejan los goles;
+  - techo de chapa con cerchas y reflectores, palcos, carteles LED y pantallas gigantes.
+- **Render:**
+  - reflejos reales del estadio en los autos (captura cúbica);
+  - oclusión ambiental (GTAO), antialiasing MSAA x4 y gradación de color;
+  - césped con detalle fotográfico y franjas de corte que cambian según desde dónde lo mirás;
+  - sombras de contacto bajo los autos, marcas de neumáticos al derrapar y luces de freno.
 - **Autos realistas:** 6 carrocerías esculpidas, pintura con barniz, llantas, neumáticos, luces y alerón.
 - **Física del auto** calibrada con los números del estudio:
   - acelerador, freno, giro según velocidad y derrape analógico;
@@ -48,6 +56,10 @@ Build de producción: `npm run build` (sale en `dist/`, es estático y se puede 
 | Cámara de pelota | C · rueda | Y |
 | Reiniciar (libre) | R | D-pad ↑ |
 | Puntajes / Pausa | Tab / Esc | View / Menu |
+
+## Assets de terceros
+
+Cielos HDRI y texturas de Poly Haven, todos **CC0** (dominio público). Ver `public/assets/CREDITOS.md`. El resto del arte es procedural y propio.
 
 ## Pruebas
 

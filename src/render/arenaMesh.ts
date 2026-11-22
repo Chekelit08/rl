@@ -195,7 +195,7 @@ function floorTexture(): THREE.CanvasTexture {
 
   // Franjas de corte (claras/oscuras) a lo largo
   for (let i = 0; i < 24; i++) {
-    g.fillStyle = i % 2 ? '#3f7d33' : '#356d2b';
+    g.fillStyle = i % 2 ? '#3d7a32' : '#38722e';
     g.fillRect(0, Y(-6000 + (i + 1) * 500), W, 500 * sy + 1);
   }
   // Variación orgánica: manchas suaves
@@ -301,9 +301,35 @@ export function buildFloor(): THREE.Mesh {
   const uv = geo.attributes.uv as THREE.BufferAttribute;
   const p = geo.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) + 4096) / 8192, (p.getY(i) + 6000) / 12000);
+  const loader = new THREE.TextureLoader();
+  const base = import.meta.env.BASE_URL + 'assets/textures/';
+  const rep = (t: THREE.Texture, r: number) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(r, r * 1.46); t.anisotropy = 16; return t; };
+  // Detalle fotográfico CC0 (Poly Haven "Leafy Grass"): normales y rugosidad; con fallback procedural
+  const normal = rep(loader.load(base + 'pasto_normal.jpg', undefined, undefined, () => { mat.normalMap = grassNormal(); }), 90);
+  const rough = rep(loader.load(base + 'pasto_rugosidad.jpg'), 90);
+  const detail = rep(loader.load(base + 'pasto_detalle.jpg'), 140);
   const mat = new THREE.MeshStandardMaterial({
-    map: floorTexture(), normalMap: grassNormal(), normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.96, metalness: 0,
+    map: floorTexture(), normalMap: normal, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: rough, roughness: 1, metalness: 0,
   });
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uDetail = { value: detail };
+    sh.uniforms.uDetail2 = { value: detail };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; uniform sampler2D uDetail; uniform sampler2D uDetail2;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        // Detalle de pasto a dos escalas (evita que se note la repetición)
+        float d1 = texture2D(uDetail, vWPos.xy / vec2(58.5, 58.5)).r;
+        float d2 = texture2D(uDetail2, vWPos.xy / vec2(356.0, 356.0)).r;
+        diffuseColor.rgb *= 0.78 + 0.32 * d1 + 0.22 * (d2 - 0.5);
+        // Franjas de corte que cambian con el ángulo de visión (como en una cancha real)
+        float stripe = mod(floor((vWPos.y + 6000.0) / 500.0), 2.0) * 2.0 - 1.0;
+        vec2 vd = normalize(cameraPosition.xy - vWPos.xy + vec2(0.0001));
+        float grazing = clamp(1.0 - (cameraPosition.z - vWPos.z) / max(length(cameraPosition - vWPos), 1.0), 0.0, 1.0);
+        diffuseColor.rgb *= 1.0 + stripe * vd.y * (0.10 + 0.12 * grazing);`);
+  };
   const m = new THREE.Mesh(geo, mat);
   m.receiveShadow = true;
   return m;

@@ -44,7 +44,7 @@ export interface CarSnap {
   qx: number; qy: number; qz: number; qw: number;
   vx: number; vy: number; vz: number;
   boosting: boolean; supersonic: boolean; demoed: boolean; onGround: boolean;
-  steer: number; boost: number; handbrake: number;
+  steer: number; throttle: number; boost: number; handbrake: number;
 }
 export interface BallSnap { x: number; y: number; z: number; qx: number; qy: number; qz: number; qw: number; vx: number; vy: number; vz: number; hidden: boolean }
 export interface Snapshot { tick: number; cars: CarSnap[]; ball: BallSnap; pads: boolean[] }
@@ -341,7 +341,7 @@ export class World {
         qx: c.q.x, qy: c.q.y, qz: c.q.z, qw: c.q.w,
         vx: c.vel.x, vy: c.vel.y, vz: c.vel.z,
         boosting: c.isBoosting, supersonic: c.supersonic, demoed: c.demoed, onGround: c.onGround,
-        steer: c.input.steer, boost: c.boost, handbrake: c.handbrakeVal,
+        steer: c.input.steer, throttle: c.input.throttle, boost: c.boost, handbrake: c.handbrakeVal,
       })),
       ball: {
         x: this.ball.pos.x, y: this.ball.pos.y, z: this.ball.pos.z,
