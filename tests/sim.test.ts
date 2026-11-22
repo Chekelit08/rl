@@ -131,6 +131,29 @@ function run(c: Car, inp: Partial<CarInput>, seconds: number, cb?: (t: number) =
   for (let i = 0; i < 3; i++) { stepBall(b, DT); collideCarBall(c, b, ++tick); }
   check('Tiro supersónico de frente → pelota ≈ 3000+', b.vel.len() > 2900, `v_auto=${c.speed().toFixed(0)} v_pelota=${b.vel.len().toFixed(0)}`);
 }
+// 9b. Flip reset: caer con las ruedas sobre la pelota devuelve el flip
+{
+  const c = newCar();
+  c.placeAt(0, 0, Math.PI / 2);
+  run(c, { jump: true }, 0.1);
+  run(c, {}, 0.05);
+  run(c, { jump: true, pitch: -1 }, 1 / 60); // gasta el flip
+  const usedFlip = c.hasFlipped;
+  // Lo ubicamos derecho, en el aire, justo encima de la pelota
+  c.q = new Car(1, 0, 'x', CAR_BODIES[0]).q.clone();
+  c.placeAt(0, 0, Math.PI / 2);
+  c.onGround = false; c.hasJumped = true; c.hasFlipped = true;
+  c.pos.set(0, 0, 400); c.vel.set(0, 0, -300); c.ang.set(0, 0, 0);
+  const b = new Ball();
+  b.reset(0, 13, 250); // la pelota no se integra en esta prueba: queda quieta
+  let reset = false;
+  for (let i = 0; i < 60 && !reset; i++) {
+    stepCar(c, emptyInput(), DT);
+    const hit = collideCarBall(c, b, 100 + i);
+    if (hit?.flipReset) reset = true;
+  }
+  check('Flip reset al tocar la pelota con las ruedas', usedFlip && reset && !c.hasFlipped, `flip usado=${usedFlip} reset=${reset}`);
+}
 // 10. Partido: kickoff y gol
 {
   const w = new World({ mode: 'match', teamSize: 1, duration: 300, unlimitedBoost: false, seed: 1 });

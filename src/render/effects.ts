@@ -20,8 +20,10 @@ export class Particles {
   private grav = new Float32Array(MAX_PARTICLES);
   private drag = new Float32Array(MAX_PARTICLES);
   private next = 0;
+  private grow: number;
 
-  constructor() {
+  constructor(opts: { additive?: boolean; grow?: number } = {}) {
+    this.grow = opts.grow ?? 0;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
@@ -30,7 +32,7 @@ export class Particles {
     const mat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: opts.additive === false ? THREE.NormalBlending : THREE.AdditiveBlending,
       uniforms: { uTex: { value: glowTexture() }, uScale: { value: 800 } },
       vertexShader: /* glsl */ `
         attribute float size; attribute float alpha; attribute vec3 color;
@@ -89,8 +91,13 @@ export class Particles {
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
       const t = Math.max(0, this.life[i] / this.maxLife[i]);
-      this.alpha[i] = t;
-      this.size[i] = this.size0[i] * (0.4 + 0.6 * t);
+      if (this.grow > 0) {
+        this.alpha[i] = t * t * 0.55;
+        this.size[i] = this.size0[i] * (1 + this.grow * (1 - t));
+      } else {
+        this.alpha[i] = t;
+        this.size[i] = this.size0[i] * (0.4 + 0.6 * t);
+      }
     }
     const g = this.points.geometry;
     (g.attributes.position as THREE.BufferAttribute).needsUpdate = true;
@@ -100,41 +107,49 @@ export class Particles {
   }
 }
 
-/** Textura de la pelota: base clara con costura curva continua (diseño propio). */
+/** Textura de pelota de fútbol clásica (icosaedro truncado) calculada por píxel en coordenadas esféricas. */
 function ballTexture(): THREE.CanvasTexture {
   const W = 1024, H = 512;
+  const phi = (1 + Math.sqrt(5)) / 2;
+  // 12 centros de pentágono (vértices del icosaedro) + 20 de hexágono (vértices del dodecaedro)
+  const pent: number[][] = [];
+  for (const a of [-1, 1]) for (const b of [-1, 1]) {
+    pent.push([0, a, b * phi], [a, b * phi, 0], [b * phi, 0, a]);
+  }
+  const hex: number[][] = [];
+  for (const a of [-1, 1]) for (const b of [-1, 1]) for (const c of [-1, 1]) hex.push([a, b, c]);
+  for (const a of [-1, 1]) for (const b of [-1, 1]) {
+    hex.push([0, a / phi, b * phi], [a / phi, b * phi, 0], [b * phi, 0, a / phi]);
+  }
+  const norm = (v: number[]) => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+  const centers = [...pent.map(norm), ...hex.map(norm)];
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d')!;
-  const grd = g.createLinearGradient(0, 0, 0, H);
-  grd.addColorStop(0, '#f4f7fb');
-  grd.addColorStop(0.5, '#dde5ef');
-  grd.addColorStop(1, '#f4f7fb');
-  g.fillStyle = grd;
-  g.fillRect(0, 0, W, H);
-  // Costura tipo "pelota de tenis": curva sinusoidal en coordenadas esféricas
-  const seam = (offset: number, color: string, width: number) => {
-    g.strokeStyle = color;
-    g.lineWidth = width;
-    g.beginPath();
-    for (let i = 0; i <= 400; i++) {
-      const u = i / 400;
-      const lon = u * Math.PI * 2;
-      const lat = 0.55 * Math.sin(2 * lon + offset);
-      const x = u * W, y = (0.5 - lat / Math.PI) * H;
-      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  const img = g.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    const lat = Math.PI / 2 - (y / H) * Math.PI;
+    const cl = Math.cos(lat), sl = Math.sin(lat);
+    for (let x = 0; x < W; x++) {
+      const lon = (x / W) * Math.PI * 2;
+      // Misma convención que SphereGeometry (eje Y como polo)
+      const d = [-Math.cos(lon) * cl, sl, Math.sin(lon) * cl];
+      let b1 = -2, b2 = -2, bi = 0;
+      for (let k = 0; k < 32; k++) {
+        const c = centers[k];
+        const dot = d[0] * c[0] + d[1] * c[1] + d[2] * c[2];
+        if (dot > b1) { b2 = b1; b1 = dot; bi = k; } else if (dot > b2) b2 = dot;
+      }
+      const seam = 1 - Math.min(1, (b1 - b2) / 0.012);
+      let r: number, gg: number, bb: number;
+      if (bi < 12) { r = 24; gg = 30; bb = 40; } else { r = 240; gg = 243; bb = 247; }
+      const k = seam * 0.85;
+      r = r * (1 - k) + 70 * k; gg = gg * (1 - k) + 76 * k; bb = bb * (1 - k) + 86 * k;
+      const i = (y * W + x) * 4;
+      img.data[i] = r; img.data[i + 1] = gg; img.data[i + 2] = bb; img.data[i + 3] = 255;
     }
-    g.stroke();
-  };
-  seam(0, '#26313f', 26);
-  seam(0, '#7CF7FF', 8);
-  // Paneles
-  g.fillStyle = 'rgba(30,40,55,0.12)';
-  for (let i = 0; i < 8; i++) {
-    g.beginPath();
-    g.arc((i + 0.5) * (W / 8), i % 2 ? H * 0.25 : H * 0.75, 30, 0, Math.PI * 2);
-    g.fill();
   }
+  g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
@@ -149,13 +164,11 @@ export class BallVisual {
   constructor() {
     this.mesh = new THREE.Mesh(
       new THREE.SphereGeometry(BALL.VISUAL_RADIUS, 48, 32),
-      new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.35, metalness: 0.05, emissive: '#1a2a3a', emissiveIntensity: 0.25 }),
+      new THREE.MeshPhysicalMaterial({ map: ballTexture(), roughness: 0.42, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.25 }),
     );
     this.mesh.castShadow = true;
-    // La textura usa lon/lat con eje Y de la esfera; giramos para que el "polo" sea Z
-    this.mesh.geometry.rotateX(Math.PI / 2);
     this.group.add(this.mesh);
-    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: BALL_GLOW, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: BALL_GLOW, transparent: true, opacity: 0.0, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.glow.scale.set(380, 380, 1);
     this.group.add(this.glow);
     // Sombra explícita justo debajo de la pelota (clave para leer la altura)

@@ -101,7 +101,7 @@ export function buildArenaSurface(step = 40): THREE.BufferGeometry {
   return g;
 }
 
-/** Material de paredes: vidrio oscuro con patrón de rombos, tinte por equipo y franja luminosa en la base. */
+/** Material de paredes realista: tablero acolchado opaco en la base (rampas) y vidrio con montantes arriba. */
 export function wallMaterial() {
   return new THREE.ShaderMaterial({
     transparent: true,
@@ -112,6 +112,9 @@ export function wallMaterial() {
       uRed: { value: new THREE.Color(TEAM_COLORS[1]) },
       uTime: { value: 0 },
       uCam: { value: new THREE.Vector3() },
+      uSky: { value: new THREE.Color('#9cc4ee') },
+      uSunDir: { value: new THREE.Vector3(0.5, 0.3, 0.8).normalize() },
+      uBoard: { value: new THREE.Color('#1a2433') },
     },
     vertexShader: /* glsl */ `
       varying vec3 vPos; varying vec3 vNor;
@@ -120,40 +123,52 @@ export function wallMaterial() {
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 uBlue; uniform vec3 uRed; uniform float uTime; uniform vec3 uCam;
+      uniform vec3 uBlue; uniform vec3 uRed; uniform float uTime; uniform vec3 uCam; uniform vec3 uSky; uniform vec3 uSunDir; uniform vec3 uBoard;
       varying vec3 vPos; varying vec3 vNor;
-      float lineGrid(vec2 p, float s, float w) {
-        vec2 q = abs(fract(p / s) - 0.5);
-        float d = min(q.x, q.y) * s;
-        return 1.0 - smoothstep(w * 0.5, w, d);
-      }
+      float line(float v, float s, float w) { float d = abs(fract(v / s) - 0.5) * s; return 1.0 - smoothstep(w * 0.5, w, d); }
       void main() {
+        // Dentro del arco: sólo se ven las redes
+        if (abs(vPos.y) > 5135.0 && abs(vPos.x) < 905.0 && vPos.z < 655.0) discard;
         vec3 n = normalize(vNor);
-        // Coordenadas sobre la superficie (triplanar simple)
-        vec3 an = abs(n);
-        vec2 uv = an.x > an.y && an.x > an.z ? vPos.yz : (an.y > an.z ? vPos.xz : vPos.xy);
-        // Rombos: rejilla rotada 45°
-        vec2 r = vec2(uv.x + uv.y, uv.x - uv.y) * 0.70710678;
-        float g1 = lineGrid(r, 360.0, 7.0);
-        float g2 = lineGrid(r, 1440.0, 14.0);
-        float team = smoothstep(-2500.0, 2500.0, vPos.y);
-        vec3 tint = mix(uBlue, uRed, team);
-        vec3 base = mix(vec3(0.03, 0.06, 0.12), tint * 0.25, 0.35);
-        float floorGlow = (1.0 - smoothstep(0.0, 90.0, vPos.z)) * smoothstep(-1.0, 4.0, vPos.z);
-        float topGlow = smoothstep(ARENA_H - 60.0, ARENA_H - 4.0, vPos.z);
         vec3 V = normalize(uCam - vPos);
-        float fres = pow(1.0 - max(dot(V, n), 0.0), 3.0);
-        vec3 col = base + tint * (g1 * 0.35 + g2 * 0.6) + tint * floorGlow * 1.6 + vec3(0.6, 0.8, 1.0) * topGlow * 0.4;
-        col += vec3(0.25, 0.4, 0.6) * fres * 0.5;
-        float alpha = 0.28 + g1 * 0.25 + g2 * 0.35 + floorGlow * 0.6 + fres * 0.25;
-        // Distancia: las paredes lejanas más tenues para no tapar el estadio
-        gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.92));
+        float team = smoothstep(-1800.0, 1800.0, vPos.y);
+        vec3 tint = mix(uBlue, uRed, team);
+        float fres = pow(1.0 - max(dot(V, n), 0.0), 4.0);
+        float diff = max(dot(n, uSunDir), 0.0) * 0.6 + 0.4;
+        // Coordenada a lo largo de la pared (para montantes verticales)
+        vec3 an = abs(n);
+        float along = an.x > an.y ? vPos.y : vPos.x;
+        float boardTop = 300.0;
+        vec3 col; float alpha;
+        if (vPos.z < boardTop) {
+          // Tablero acolchado: paneles con juntas y franja de equipo arriba
+          float joint = line(along, 512.0, 6.0);
+          float stripe = smoothstep(boardTop - 42.0, boardTop - 34.0, vPos.z) * (1.0 - smoothstep(boardTop - 10.0, boardTop - 2.0, vPos.z));
+          col = mix(uBoard, uBoard * 0.6, joint) * diff;
+          col = mix(col, tint * 1.1, stripe);
+          col += vec3(0.15) * fres;
+          alpha = 1.0;
+        } else {
+          // Vidrio: casi transparente, montantes metálicos y reflejo del cielo
+          float mull = line(along, 1024.0, 14.0);
+          float rail = line(vPos.z, 680.0, 10.0) * step(boardTop + 40.0, vPos.z);
+          float top = smoothstep(ARENA_H - 70.0, ARENA_H - 20.0, vPos.z);
+          vec3 glass = mix(vec3(0.75, 0.85, 0.95), tint, 0.25) * 0.25;
+          col = glass + uSky * fres * 0.9;
+          alpha = 0.06 + fres * 0.45;
+          vec3 metal = vec3(0.55, 0.6, 0.66) * diff;
+          col = mix(col, metal, max(mull, rail) * 0.9);
+          alpha = max(alpha, max(mull, rail) * 0.85);
+          col = mix(col, metal * 1.2, top);
+          alpha = max(alpha, top);
+        }
+        gl_FragColor = vec4(col, alpha);
         #include <colorspace_fragment>
       }`.replace(/ARENA_H/g, ARENA.H.toFixed(1)),
   });
 }
 
-/** Contorno del piso (octógono redondeado + arcos), en el plano XY. */
+/** Contorno del piso (octógono + arcos), en el plano XY. */
 function floorShape(): THREE.Shape {
   const s = new THREE.Shape();
   const X = ARENA.X, Y = ARENA.Y, C = ARENA.CHAMFER;
@@ -168,7 +183,7 @@ function floorShape(): THREE.Shape {
   return s;
 }
 
-/** Textura del césped con líneas (diseño propio). */
+/** Césped natural cortado en franjas, con líneas blancas. */
 function floorTexture(): THREE.CanvasTexture {
   const W = 2048, H = 3000; // 4 uu por px
   const cv = document.createElement('canvas');
@@ -178,64 +193,107 @@ function floorTexture(): THREE.CanvasTexture {
   const X = (x: number) => (x + 4096) * sx;
   const Y = (y: number) => H - (y + 6000) * sy;
 
-  // Franjas de césped (cortadas en diagonal suave)
+  // Franjas de corte (claras/oscuras) a lo largo
   for (let i = 0; i < 24; i++) {
-    g.fillStyle = i % 2 ? '#1d5a3a' : '#1a5235';
+    g.fillStyle = i % 2 ? '#3f7d33' : '#356d2b';
     g.fillRect(0, Y(-6000 + (i + 1) * 500), W, 500 * sy + 1);
   }
-  // Tinte por mitad de cancha
-  const grad = g.createLinearGradient(0, Y(-6000), 0, Y(6000));
-  grad.addColorStop(0, 'rgba(46,139,255,0.30)');
-  grad.addColorStop(0.42, 'rgba(46,139,255,0.06)');
-  grad.addColorStop(0.58, 'rgba(255,51,85,0.06)');
-  grad.addColorStop(1, 'rgba(255,51,85,0.30)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, W, H);
-  // Ruido sutil
+  // Variación orgánica: manchas suaves
+  for (let i = 0; i < 900; i++) {
+    const x = Math.random() * W, y = Math.random() * H, r = 20 + Math.random() * 90;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    const c = Math.random() < 0.5 ? '255,255,200' : '0,30,0';
+    grd.addColorStop(0, `rgba(${c},0.05)`);
+    grd.addColorStop(1, `rgba(${c},0)`);
+    g.fillStyle = grd;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // Grano fino
   const img = g.getImageData(0, 0, W, H);
   for (let i = 0; i < img.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 10;
-    img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n;
+    const n = (Math.random() - 0.5) * 16;
+    img.data[i] += n * 0.7; img.data[i + 1] += n; img.data[i + 2] += n * 0.5;
   }
   g.putImageData(img, 0, 0);
+  // Tinte de equipo muy sutil en cada área
+  for (const [t, y0] of [[0, -5120], [1, 5120]] as const) {
+    const grd = g.createLinearGradient(0, Y(y0), 0, Y(y0 * 0.6));
+    grd.addColorStop(0, t === 0 ? 'rgba(46,139,255,0.16)' : 'rgba(255,51,85,0.16)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, Math.min(Y(y0), Y(y0 * 0.6)), W, Math.abs(Y(y0) - Y(y0 * 0.6)));
+  }
 
-  g.strokeStyle = 'rgba(235,245,255,0.85)';
-  g.lineWidth = 6;
+  g.strokeStyle = 'rgba(245,248,250,0.9)';
+  g.lineWidth = 7;
   g.lineJoin = 'round';
-  // Línea media y círculo central
   g.beginPath(); g.moveTo(X(-4096), Y(0)); g.lineTo(X(4096), Y(0)); g.stroke();
   g.beginPath(); g.ellipse(X(0), Y(0), 1000 * sx, 1000 * sy, 0, 0, Math.PI * 2); g.stroke();
-  g.beginPath(); g.ellipse(X(0), Y(0), 140 * sx, 140 * sy, 0, 0, Math.PI * 2); g.stroke();
-  // Áreas (diseño propio: rectángulo con esquinas redondeadas + semicírculo)
+  g.fillStyle = 'rgba(245,248,250,0.9)';
+  g.beginPath(); g.ellipse(X(0), Y(0), 40 * sx, 40 * sy, 0, 0, Math.PI * 2); g.fill();
   for (const s of [-1, 1]) {
     const yl = s * 5120;
+    // Área grande y área chica
+    g.strokeRect(X(-1800), Math.min(Y(yl), Y(yl - s * 1500)), 3600 * sx, 1500 * sy);
+    g.strokeRect(X(-1150), Math.min(Y(yl), Y(yl - s * 560)), 2300 * sx, 560 * sy);
+    // Medialuna
     g.beginPath();
-    g.moveTo(X(-1700), Y(yl));
-    g.lineTo(X(-1700), Y(yl - s * 1150));
-    g.quadraticCurveTo(X(-1700), Y(yl - s * 1400), X(-1450), Y(yl - s * 1400));
-    g.lineTo(X(1450), Y(yl - s * 1400));
-    g.quadraticCurveTo(X(1700), Y(yl - s * 1400), X(1700), Y(yl - s * 1150));
-    g.lineTo(X(1700), Y(yl));
+    g.ellipse(X(0), Y(yl - s * 1500), 700 * sx, 700 * sy, 0, s > 0 ? 0 : Math.PI, s > 0 ? Math.PI : Math.PI * 2);
     g.stroke();
-    g.beginPath();
-    g.ellipse(X(0), Y(yl - s * 1400), 600 * sx, 600 * sy, 0, s > 0 ? 0 : Math.PI, s > 0 ? Math.PI : Math.PI * 2);
-    g.stroke();
-    g.beginPath(); g.moveTo(X(-893), Y(yl)); g.lineTo(X(893), Y(yl)); g.lineWidth = 10; g.stroke(); g.lineWidth = 6;
+    // Línea de gol reforzada
+    g.save(); g.lineWidth = 11; g.beginPath(); g.moveTo(X(-893), Y(yl)); g.lineTo(X(893), Y(yl)); g.stroke(); g.restore();
   }
-  // Logo central
+  // Logo central pintado en el césped
   g.save();
   g.translate(X(0), Y(0));
-  g.font = 'italic 900 64px "Arial Black", Arial, sans-serif';
+  g.font = 'italic 900 66px "Arial Black", Arial, sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillStyle = 'rgba(255,255,255,0.22)';
+  g.fillStyle = 'rgba(255,255,255,0.18)';
   g.fillText('TURBOGOL', 0, 0);
   g.restore();
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = 16;
   return tex;
+}
+
+/** Mapa de normales de pasto (repetible) para el detalle cercano. */
+function grassNormal(): THREE.CanvasTexture {
+  const N = 256;
+  const h = new Float32Array(N * N);
+  for (let i = 0; i < 2600; i++) {
+    // hojas: trazos cortos
+    let x = Math.random() * N, y = Math.random() * N;
+    const a = Math.random() * Math.PI * 2, len = 4 + Math.random() * 6;
+    for (let k = 0; k < len; k++) {
+      const xi = ((Math.floor(x) % N) + N) % N, yi = ((Math.floor(y) % N) + N) % N;
+      h[yi * N + xi] += 0.6;
+      x += Math.cos(a); y += Math.sin(a);
+    }
+  }
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const g = cv.getContext('2d')!;
+  const img = g.createImageData(N, N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const hl = h[y * N + ((x - 1 + N) % N)], hr = h[y * N + ((x + 1) % N)];
+    const hd = h[((y - 1 + N) % N) * N + x], hu = h[((y + 1) % N) * N + x];
+    let nx = (hl - hr) * 1.5, ny = (hd - hu) * 1.5, nz = 1;
+    const l = Math.hypot(nx, ny, nz);
+    nx /= l; ny /= l; nz /= l;
+    const i = (y * N + x) * 4;
+    img.data[i] = (nx * 0.5 + 0.5) * 255;
+    img.data[i + 1] = (ny * 0.5 + 0.5) * 255;
+    img.data[i + 2] = (nz * 0.5 + 0.5) * 255;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(160, 230);
+  return t;
 }
 
 export function buildFloor(): THREE.Mesh {
@@ -243,19 +301,21 @@ export function buildFloor(): THREE.Mesh {
   const uv = geo.attributes.uv as THREE.BufferAttribute;
   const p = geo.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) + 4096) / 8192, (p.getY(i) + 6000) / 12000);
-  const mat = new THREE.MeshStandardMaterial({ map: floorTexture(), roughness: 0.92, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({
+    map: floorTexture(), normalMap: grassNormal(), normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.96, metalness: 0,
+  });
   const m = new THREE.Mesh(geo, mat);
   m.receiveShadow = true;
   return m;
 }
 
-/** Textura de red (tile). */
+/** Textura de red (malla de cuerda). */
 function netTexture() {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 64;
   const g = cv.getContext('2d')!;
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
-  g.lineWidth = 3;
+  g.strokeStyle = 'rgba(255,255,255,0.95)';
+  g.lineWidth = 2.5;
   g.beginPath();
   g.moveTo(0, 32); g.lineTo(32, 0); g.lineTo(64, 32); g.lineTo(32, 64); g.closePath();
   g.stroke();
@@ -267,54 +327,61 @@ function netTexture() {
 export function buildGoals(): THREE.Group {
   const grp = new THREE.Group();
   const net = netTexture();
+  const postMat = new THREE.MeshStandardMaterial({ color: '#f4f6f8', roughness: 0.3, metalness: 0.5 });
+  const supportMat = new THREE.MeshStandardMaterial({ color: '#9aa3ad', roughness: 0.4, metalness: 0.7 });
   for (const team of [0, 1]) {
     const s = team === 0 ? -1 : 1;
     const color = new THREE.Color(TEAM_COLORS[team]);
-    const frameMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.6, roughness: 0.3, metalness: 0.2 });
-    const r = 22;
-    const H = ARENA.GOAL_H, W = ARENA.GOAL_HW, Y = ARENA.Y + 10;
-    // Postes
+    const r = 20;
+    const H = ARENA.GOAL_H, W = ARENA.GOAL_HW, Y = ARENA.Y + 8;
+    const depth = ARENA.GOAL_DEPTH - 12;
+    // Postes y travesaño blancos
     for (const x of [-W, W]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(r, r, H, 16), frameMat);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(r, r, H, 20), postMat);
       post.rotation.x = Math.PI / 2;
       post.position.set(x, s * Y, H / 2);
+      post.castShadow = true;
       grp.add(post);
+      // Soportes traseros
+      const back = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, H, 10), supportMat);
+      back.rotation.x = Math.PI / 2;
+      back.position.set(x, s * (ARENA.Y + depth), H / 2);
+      grp.add(back);
+      const topBar = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, depth, 10), supportMat);
+      topBar.position.set(x, s * (ARENA.Y + depth / 2), H);
+      grp.add(topBar);
     }
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, W * 2 + r * 2, 16), frameMat);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, W * 2 + r * 2, 20), postMat);
     bar.rotation.z = Math.PI / 2;
     bar.position.set(0, s * Y, H);
+    bar.castShadow = true;
     grp.add(bar);
-    // Red: fondo, techo y laterales
+    // Red
     const mk = (w: number, h: number, rep: [number, number]) => {
       const t = net.clone();
       t.needsUpdate = true;
       t.repeat.set(rep[0], rep[1]);
       return new THREE.Mesh(
         new THREE.PlaneGeometry(w, h),
-        new THREE.MeshBasicMaterial({ map: t, color: color.clone().lerp(new THREE.Color('#ffffff'), 0.5), transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }),
+        new THREE.MeshStandardMaterial({ map: t, alphaMap: t, color: '#ffffff', transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, roughness: 1 }),
       );
     };
-    const depth = ARENA.GOAL_DEPTH - 10;
-    const back = mk(W * 2, H, [W / 40, H / 40]);
+    const back = mk(W * 2, H, [W / 32, H / 32]);
     back.rotation.x = Math.PI / 2;
     back.position.set(0, s * (ARENA.Y + depth), H / 2);
     grp.add(back);
-    const top = mk(W * 2, depth, [W / 40, depth / 80]);
+    const top = mk(W * 2, depth, [W / 32, depth / 64]);
     top.position.set(0, s * (ARENA.Y + depth / 2), H - 2);
     grp.add(top);
     for (const x of [-W, W]) {
-      const side = mk(depth, H, [depth / 80, H / 40]);
+      const side = mk(depth, H, [depth / 64, H / 32]);
       side.rotation.set(Math.PI / 2, Math.PI / 2, 0);
-      side.position.set(x + Math.sign(x) * -2, s * (ARENA.Y + depth / 2), H / 2);
+      side.position.set(x - Math.sign(x) * 2, s * (ARENA.Y + depth / 2), H / 2);
       grp.add(side);
     }
-    // Luz de fondo del arco
-    const glow = new THREE.Mesh(
-      new THREE.PlaneGeometry(W * 2, 60),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 }),
-    );
-    glow.position.set(0, s * (ARENA.Y + depth - 4), 4);
-    glow.rotation.x = Math.PI / 2;
+    // Iluminación de equipo dentro del arco (franja en el piso del fondo)
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, 40), new THREE.MeshBasicMaterial({ color, toneMapped: false }));
+    glow.position.set(0, s * (ARENA.Y + depth - 6), 2);
     grp.add(glow);
   }
   return grp;

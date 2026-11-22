@@ -15,11 +15,14 @@ Build de producción: `npm run build` (sale en `dist/`, es estático y se puede 
 ## Qué hay en esta versión (Fase 1)
 
 - **Arena** de medidas estándar del género, modelada como SDF. Incluye rampas curvas, esquinas achaflanadas, arcos con red y postes redondeados.
+- **Estadio realista** de día (cielo físico con sol y nubes) o de noche (reflectores), con tribunas, público, techo, carteles LED y pantallas.
+- **Autos realistas:** 6 carrocerías esculpidas, pintura con barniz, llantas, neumáticos, luces y alerón.
 - **Física del auto** calibrada con los números del estudio:
   - acelerador, freno, giro según velocidad y derrape analógico;
   - adherencia a paredes; en el techo te caés;
   - salto con hold, doble salto, flips con cancel (half-flip, speed flip), control aéreo y air roll;
-  - turbo, supersónico, bumps y demoliciones.
+  - turbo, supersónico, bumps y demoliciones;
+  - flip reset: si tocás la pelota con las 4 ruedas en el aire, recuperás el flip.
 - **Pelota:** rebote con fricción y spin, drag y el impulso extra en los golpes que da el "feel" del género.
 - **Partidos vs bots** 1v1, 2v2 y 3v3, con 3 dificultades (Novato, Profesional, Leyenda).
   - Reglas: kickoff con 5 posiciones, reloj, gol de oro y fin cuando la pelota toca el piso en 0:00.

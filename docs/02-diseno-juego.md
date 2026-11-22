@@ -20,16 +20,29 @@
 | Elemento | Decisión |
 |---|---|
 | Nombre | **TURBOGOL** 🔧 (provisorio) |
-| Tono | Deporte del futuro, de noche, eléctrico. Más "estadio nocturno con aurora" que "neón ciberpunk" |
+| Tono | **Realista:** estadio de fútbol de verdad, a pleno sol o de noche con reflectores, autos deportivos con pintura de auto real. Nada de estética "de juguete" |
 | Equipos | **Azul** (#2E8BFF) vs **Rojo** (#FF3355) 🔧 (clásico deportivo, distinto del referente) |
-| Pelota | Blanca con costuras en curva continua (tipo pelota de tenis), con anillo luminoso. La costura deja ver el giro (spin) |
+| Pelota | Pelota de fútbol clásica (pentágonos y hexágonos), grande y bien contrastada. El patrón deja ver el giro (spin) |
 | Tipografía | Display condensada en itálica (sensación de velocidad). Sans legible para el HUD |
-| Estadio 1 | **Estadio Aurora:** noche polar, aurora en el cielo, tribunas con luces, paredes de vidrio con un patrón de **rombos y líneas** (no hexágonos) |
-| Estadios futuros 🔧 | Cañón Rojo (atardecer en el desierto), Puerto Neón (ciudad con lluvia), Domo Glaciar (hielo, de día) |
+| Estadio 1 | **Estadio Central:** dos anillos de tribunas con público, techo con reflectores, carteles LED y pantallas. Paredes de vidrio con montantes y tablero acolchado en la base. Versión **de día** (cielo físico con sol y nubes) y **de noche** |
+| Estadios futuros 🔧 | Cañón Rojo (atardecer en el desierto), Puerto Neón (ciudad con lluvia), Domo Glaciar (hielo) |
 
 Todos los estadios tienen **exactamente la misma geometría jugable** (como en el competitivo del género). Solo cambia la decoración.
 
 ---
+
+## 2b. Fidelidad al original (qué es igual y qué es propio)
+
+| Igual al original (mecánicas y sensación) | Propio (identidad) |
+|---|---|
+| Medidas de cancha, arcos, rampas y esquinas | Nombre, logo y estadios |
+| Pads de turbo (posición, cantidad, tiempos) | Diseño de los autos (6 carrocerías propias) |
+| Física del auto: aceleración, giro, salto, flip, cancel, aire, paredes | Pelota (patrón clásico de fútbol) |
+| Física de la pelota y el impulso extra de cada golpe | Colores de equipo (Azul / Rojo) |
+| Hitboxes de los 6 arquetipos | Nombres de rangos |
+| Supersónico, bumps, demoliciones, flip reset | Audio |
+| Reglas: 5:00, kickoff, gol de oro, fin al tocar el piso | |
+| Cámara: FOV, distancia, altura, ángulo, rigidez, giro | |
 
 ## 3. Autos: 6 carrocerías originales (una por hitbox)
 
@@ -205,7 +218,8 @@ src/
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| **F1 — Núcleo jugable** | Arena, física completa (manejo, paredes, salto, flips, aéreos, derrape, turbo, supersónico, demoliciones), pelota, pads, goles, kickoff, reloj, HUD, cámara de pelota/auto, teclado y mando, bots 1v1/2v2/3v3, repetición de gol, audio sintetizado | ✅ **en este commit** |
+| **F1 — Núcleo jugable** | Arena, física completa (manejo, paredes, salto, flips, aéreos, derrape, turbo, supersónico, demoliciones), pelota, pads, goles, kickoff, reloj, HUD, cámara de pelota/auto, teclado y mando, bots 1v1/2v2/3v3, repetición de gol, audio sintetizado | ✅ |
+| **F1.5 — Realismo** | Estadio realista de día y de noche, autos con carrocería esculpida y pintura con barniz, césped natural, pelota clásica, humo del turbo, flip reset | ✅ |
 | F2 — Entrenamiento y clips | Packs de entrenamiento + editor + códigos, guardar clips (IndexedDB) y exportar, visor de repeticiones, ajustes de cámara/controles/gráficos, tutorial | Próxima |
 | F3 — Online casual | Servidor autoritativo, salas con código, predicción/rollback, chat rápido | |
 | F4 — Competitivo | Cuentas, matchmaking, MMR Glicko-2, rangos, temporadas, estadísticas | |

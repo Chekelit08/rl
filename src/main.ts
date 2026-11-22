@@ -5,14 +5,15 @@ import { AudioEngine } from './audio/audio.ts';
 import { InputManager } from './input/input.ts';
 import { DEFAULT_CAMERA, type CameraSettings } from './render/camera.ts';
 import { GameRenderer } from './render/renderer.ts';
+import type { Theme } from './render/stadium.ts';
 import { emptyInput, type CarInput } from './sim/car.ts';
 import { CAR_BODIES, DT, TEAM_NAMES } from './sim/constants.ts';
 import { Quat } from './sim/math.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
 
 // ---------- Ajustes persistentes ----------
-interface Settings { camera: CameraSettings; volume: number; quality: 'alta' | 'baja'; replays: boolean; bodyIndex: number }
-const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0 };
+interface Settings { camera: CameraSettings; volume: number; quality: 'alta' | 'baja'; replays: boolean; bodyIndex: number; theme: Theme }
+const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0, theme: 'dia' };
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem('turbogol.settings');
@@ -87,7 +88,7 @@ class Game {
 
   constructor() {
     const app = $('app');
-    this.renderer = new GameRenderer(app, this.settings.camera);
+    this.renderer = new GameRenderer(app, this.settings.camera, this.settings.theme);
     this.renderer.setQuality(this.settings.quality);
     this.input = new InputManager(app);
     this.audio.setVolume(this.settings.volume);
@@ -293,6 +294,7 @@ class Game {
       case 'pad': if (ev.carId === 0) this.audio.pad(ev.big); break;
       case 'jump': if (ev.carId === 0) this.audio.jump(); break;
       case 'flip': if (ev.carId === 0) this.audio.jump(); break;
+      case 'flipreset': if (ev.carId === 0) { this.audio.pad(false); this.toast('¡Flip reset!'); } break;
       case 'countdown': this.audio.countdown(false); this.setCenter(String(ev.n), 'pop'); break;
       case 'kickoff': this.audio.countdown(true); this.setCenter('¡YA!', 'pop', 0.8); break;
       case 'goal': {
@@ -498,6 +500,11 @@ class Game {
     this.renderer.resize();
     this.audio.setVolume(this.settings.volume);
     if (this.renderer.quality !== this.settings.quality) this.renderer.setQuality(this.settings.quality);
+    if (this.renderer.theme !== this.settings.theme) {
+      this.renderer.setTheme(this.settings.theme);
+      this.renderer.setQuality(this.settings.quality);
+      this.screenClock = '';
+    }
     saveSettings(this.settings);
   }
 
@@ -516,6 +523,7 @@ class Game {
       ['Sacudida', 'shake', 0, 1, 1, () => (cam.shake ? 1 : 0), (v) => (cam.shake = v === 1), (v) => (v ? 'Sí' : 'No')],
       ['Volumen', 'volume', 0, 1, 0.05, () => this.settings.volume, (v) => (this.settings.volume = v), (v) => `${Math.round(v * 100)}%`],
       ['Calidad', 'quality', 0, 1, 1, () => (this.settings.quality === 'alta' ? 1 : 0), (v) => (this.settings.quality = v ? 'alta' : 'baja'), (v) => (v ? 'Alta' : 'Baja')],
+      ['Estadio', 'theme', 0, 1, 1, () => (this.settings.theme === 'dia' ? 0 : 1), (v) => (this.settings.theme = v ? 'noche' : 'dia'), (v) => (v ? 'Noche' : 'Día')],
       ['Repeticiones', 'replays', 0, 1, 1, () => (this.settings.replays ? 1 : 0), (v) => (this.settings.replays = v === 1), (v) => (v ? 'Sí' : 'No')],
     ];
     for (const [label, key, min, max, step, get, set, fmt] of defs) {

@@ -11,6 +11,7 @@ export interface BallHit {
   carId: number;
   impulse: number; // cambio de velocidad de la pelota (uu/s)
   point: V3;
+  flipReset: boolean;
 }
 
 /** Devuelve info del golpe si hubo contacto. */
@@ -47,6 +48,17 @@ export function collideCarBall(c: Car, b: Ball, tick: number): BallHit | null {
   const n = c.q.rotate(nLocal);
   const contact = center.add(c.q.rotate(cl));
   const pen = R - dist;
+
+  // Flip reset: tocar la pelota con las ruedas (cara inferior del auto) en el aire devuelve el flip
+  let flipReset = false;
+  if (!c.onGround && nLocal.z < -0.75 && (c.hasFlipped || c.hasDoubleJumped || c.hasJumped)) {
+    c.hasJumped = false;
+    c.hasDoubleJumped = false;
+    c.hasFlipped = false;
+    c.isFlipping = false;
+    c.airTimeSinceJump = 0;
+    flipReset = true;
+  }
 
   // Velocidades antes del impulso (para el impulso extra)
   const ballVel0 = b.vel.clone();
@@ -108,7 +120,7 @@ export function collideCarBall(c: Car, b: Ball, tick: number): BallHit | null {
 
   b.vel.clampLenIn(BALL.MAX_SPEED);
   b.ang.clampLenIn(BALL.MAX_ANG);
-  return { carId: c.id, impulse: impulseMag, point: contact };
+  return { carId: c.id, impulse: impulseMag, point: contact, flipReset };
 }
 
 // ---------- Auto ↔ auto (OBB vs OBB por SAT) ----------

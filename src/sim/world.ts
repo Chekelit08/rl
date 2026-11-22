@@ -30,6 +30,7 @@ export type GameEvent =
   | { type: 'bump'; attacker: number; victim: number; pos: V3 }
   | { type: 'jump'; carId: number }
   | { type: 'flip'; carId: number }
+  | { type: 'flipreset'; carId: number }
   | { type: 'countdown'; n: number }
   | { type: 'kickoff' }
   | { type: 'save'; carId: number }
@@ -190,7 +191,10 @@ export class World {
       for (const c of this.cars) {
         const preVel = this.ball.vel.clone();
         const hit = collideCarBall(c, this.ball, this.tick);
-        if (hit) this.onTouch(c, hit.impulse, preVel);
+        if (hit) {
+          this.onTouch(c, hit.impulse, preVel);
+          if (hit.flipReset) this.events.push({ type: 'flipreset', carId: c.id });
+        }
       }
     }
 
