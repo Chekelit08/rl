@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TURBOGOL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="scoreboard">
+        <div class="team t0"><span class="tname">AZUL</span><span class="score" id="s0">0</span></div>
+        <div class="clock" id="clock">5:00</div>
+        <div class="team t1"><span class="score" id="s1">0</span><span class="tname">ROJO</span></div>
+      </div>
+      <div class="feed" id="feed"></div>
+      <div class="center" id="center"></div>
+      <div class="subcenter" id="subcenter"></div>
+      <div class="boost">
+        <svg viewBox="0 0 120 120">
+          <circle class="ring-bg" cx="60" cy="60" r="50" />
+          <circle class="ring" id="boostRing" cx="60" cy="60" r="50" />
+        </svg>
+        <div class="boost-num" id="boostNum">33</div>
+        <div class="boost-label">TURBO</div>
+      </div>
+      <div class="chips">
+        <div class="chip" id="camChip">CÁMARA: PELOTA</div>
+        <div class="chip dim" id="speedChip">0 km/h</div>
+      </div>
+      <div class="hint" id="hint"></div>
+      <div class="replay-badge hidden" id="replayBadge">● REPETICIÓN <span>Espacio / A para saltar</span></div>
+      <div class="toast hidden" id="toast"></div>
+    </div>
+
+    <!-- Tabla de puntajes -->
+    <div id="scoreTable" class="overlay hidden"><div class="panel wide" id="scoreTableInner"></div></div>
+
+    <!-- Menú principal -->
+    <div id="menu" class="overlay">
+      <div class="menu-wrap">
+        <div class="logo">TURBO<span>GOL</span></div>
+        <div class="tagline">Fútbol con autos · Prototipo F1</div>
+        <div class="menu-buttons">
+          <button class="btn primary" data-act="match">Partido vs bots</button>
+          <button class="btn" data-act="freeplay">Juego libre</button>
+          <button class="btn" data-act="settings">Ajustes</button>
+          <button class="btn" data-act="controls">Controles</button>
+        </div>
+        <div class="soon">Próximamente: entrenamiento · clips · repeticiones · online · rangos</div>
+      </div>
+    </div>
+
+    <!-- Configurar partido -->
+    <div id="setup" class="overlay hidden">
+      <div class="panel">
+        <h2 id="setupTitle">Partido vs bots</h2>
+        <div class="row" id="rowMode">
+          <label>Modo</label>
+          <div class="seg" data-key="teamSize">
+            <button data-v="1" class="on">1v1</button><button data-v="2">2v2</button><button data-v="3">3v3</button>
+          </div>
+        </div>
+        <div class="row" id="rowDiff">
+          <label>Dificultad</label>
+          <div class="seg" data-key="difficulty">
+            <button data-v="0">Novato</button><button data-v="1" class="on">Profesional</button><button data-v="2">Leyenda</button>
+          </div>
+        </div>
+        <div class="row" id="rowTime">
+          <label>Duración</label>
+          <div class="seg" data-key="duration">
+            <button data-v="180">3 min</button><button data-v="300" class="on">5 min</button><button data-v="600">10 min</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Carrocería</label>
+          <div class="bodies" id="bodies"></div>
+        </div>
+        <div class="row" id="rowBoost">
+          <label>Turbo infinito</label>
+          <div class="seg" data-key="unlimited">
+            <button data-v="0" class="on">No</button><button data-v="1">Sí</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" data-act="back">Volver</button>
+          <button class="btn primary" data-act="play">¡Jugar!</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ajustes -->
+    <div id="settings" class="overlay hidden">
+      <div class="panel">
+        <h2>Ajustes</h2>
+        <div class="sliders" id="sliders"></div>
+        <div class="actions">
+          <button class="btn" data-act="resetSettings">Valores por defecto</button>
+          <button class="btn primary" data-act="closeSettings">Listo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controles -->
+    <div id="controls" class="overlay hidden">
+      <div class="panel wide">
+        <h2>Controles</h2>
+        <table class="ctable">
+          <tr><th>Acción</th><th>Teclado / mouse</th><th>Mando</th></tr>
+          <tr><td>Acelerar / reversa</td><td>W / S</td><td>RT / LT</td></tr>
+          <tr><td>Dirección · yaw</td><td>A / D</td><td>Stick izquierdo</td></tr>
+          <tr><td>Pitch (en el aire)</td><td>W (nariz abajo) / S (nariz arriba)</td><td>Stick izquierdo ↑↓</td></tr>
+          <tr><td>Saltar · doble salto · flip</td><td>Espacio o clic derecho</td><td>A / ✕</td></tr>
+          <tr><td>Turbo</td><td>Clic izquierdo o K</td><td>B / ○</td></tr>
+          <tr><td>Derrape + air roll libre</td><td>Shift izquierdo</td><td>X / □</td></tr>
+          <tr><td>Air roll izq. / der.</td><td>Q / E</td><td>LB / RB</td></tr>
+          <tr><td>Cámara de pelota</td><td>C · rueda · clic central</td><td>Y / △</td></tr>
+          <tr><td>Mirar alrededor</td><td>—</td><td>Stick derecho</td></tr>
+          <tr><td>Reiniciar (juego libre)</td><td>R</td><td>D-pad ↑</td></tr>
+          <tr><td>Puntajes</td><td>Tab</td><td>View / Share</td></tr>
+          <tr><td>Pausa</td><td>Esc</td><td>Menu / Options</td></tr>
+        </table>
+        <p class="tip">Flip: saltá y, en el aire, volvé a saltar con una dirección. Half-flip: flip hacia atrás, a mitad tirá el stick hacia adelante (cancel) y hacé air roll. Wave dash: flip justo antes de tocar el piso.</p>
+        <div class="actions"><button class="btn primary" data-act="closeControls">Listo</button></div>
+      </div>
+    </div>
+
+    <!-- Pausa -->
+    <div id="pause" class="overlay hidden">
+      <div class="panel narrow">
+        <h2>Pausa</h2>
+        <div class="menu-buttons">
+          <button class="btn primary" data-act="resume">Continuar</button>
+          <button class="btn" data-act="restart">Reiniciar</button>
+          <button class="btn" data-act="settings">Ajustes</button>
+          <button class="btn" data-act="controls">Controles</button>
+          <button class="btn" data-act="quit">Salir al menú</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fin del partido -->
+    <div id="end" class="overlay hidden">
+      <div class="panel wide">
+        <h2 id="endTitle">¡Victoria!</h2>
+        <div id="endScore" class="endscore"></div>
+        <div id="endTable"></div>
+        <div class="actions">
+          <button class="btn" data-act="quit">Menú</button>
+          <button class="btn primary" data-act="restart">Revancha</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading" class="overlay"><div class="loading">Construyendo estadio…</div></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,213 @@
+# 02 · Documento de diseño: TURBOGOL (nombre provisorio)
+
+> Fútbol con autos. **Las mismas sensaciones** que el referente del género (física, mecánicas, ritmo y competitivo) con **identidad propia**.
+> Todo lo marcado con 🔧 son decisiones abiertas para charlar.
+
+---
+
+## 1. Pilares
+
+1. **Física primero.** 120 Hz, determinista, calibrada con los números del estudio (doc 01). Si una mecánica avanzada del género no sale sola (half-flip, wave dash, flip reset…), es un bug.
+2. **Justo.** Nada comprable afecta la física. Hay 6 hitboxes, todas disponibles desde el principio.
+3. **Legible.** La pelota siempre clara, su sombra siempre debajo, los equipos con colores inconfundibles y un HUD mínimo.
+4. **Sin fricción para jugar.** Se juega en el navegador: un link y estás jugando. Después, versión de escritorio.
+5. **Compartible.** Clips de los últimos segundos con un botón, repeticiones completas y códigos de packs de entrenamiento.
+
+---
+
+## 2. Identidad
+
+| Elemento | Decisión |
+|---|---|
+| Nombre | **TURBOGOL** 🔧 (provisorio) |
+| Tono | Deporte del futuro, de noche, eléctrico. Más "estadio nocturno con aurora" que "neón ciberpunk" |
+| Equipos | **Azul** (#2E8BFF) vs **Rojo** (#FF3355) 🔧 (clásico deportivo, distinto del referente) |
+| Pelota | Blanca con costuras en curva continua (tipo pelota de tenis), con anillo luminoso. La costura deja ver el giro (spin) |
+| Tipografía | Display condensada en itálica (sensación de velocidad). Sans legible para el HUD |
+| Estadio 1 | **Estadio Aurora:** noche polar, aurora en el cielo, tribunas con luces, paredes de vidrio con un patrón de **rombos y líneas** (no hexágonos) |
+| Estadios futuros 🔧 | Cañón Rojo (atardecer en el desierto), Puerto Neón (ciudad con lluvia), Domo Glaciar (hielo, de día) |
+
+Todos los estadios tienen **exactamente la misma geometría jugable** (como en el competitivo del género). Solo cambia la decoración.
+
+---
+
+## 3. Autos: 6 carrocerías originales (una por hitbox)
+
+| Carrocería | Hitbox (L × A × H) | Personalidad |
+|---|---|---|
+| **Toro** | 120.5 × 86.7 × 38.7 | Equilibrado, el "auto por defecto" |
+| **Flecha** | 130.4 × 85.8 × 33.8 | Largo y bajo, para flicks |
+| **Lámina** | 131.3 × 87.2 × 31.9 | Plano y ancho, aéreos |
+| **Aguja** | 134.0 × 83.0 × 32.8 | Largo y fino, precisión |
+| **Mixto** | 129.5 × 84.7 × 36.7 | Híbrido |
+| **Furgón** | 123.2 × 79.2 × 44.2 | Alto, defensivo |
+
+**Personalización** (fase de progresión):
+- pintura primaria y secundaria;
+- calcomanías y ruedas;
+- propulsor (color y forma de la llama del turbo) y estela;
+- explosión de gol, título y banner.
+
+---
+
+## 4. Modos
+
+| Fase | Modo | Descripción |
+|---|---|---|
+| ✅ F1 | **Juego libre** | Cancha sola, pelota y turbo infinito opcional. `R` resetea |
+| ✅ F1 | **Partido vs bots** | 1v1, 2v2, 3v3; 3 dificultades (Novato, Profesional, Leyenda) |
+| F2 | **Entrenamiento** | Packs de tiros (delantero, arquero, aéreo), editor y códigos para compartir |
+| F2 | **Repeticiones y clips** | Repetición de gol automática; "Guardar clip" de los últimos 15 s; visor con línea de tiempo y cámaras |
+| F3 | **Online casual** | Salas privadas con código; 1v1 a 3v3 |
+| F4 | **Online competitivo** | Matchmaking por MMR, rangos y temporadas |
+| F5 | **Modos extra** 🔧 | Básquet, hockey sobre hielo, pelota teledirigida, poderes |
+
+---
+
+## 5. Rangos (escalera propia)
+
+| Tier | Subniveles | Ícono 🔧 |
+|---|---|---|
+| Bronce | I–III | Tuerca |
+| Plata | I–III | Engranaje |
+| Oro | I–III | Pistón |
+| Platino | I–III | Turbina |
+| Diamante | I–III | Cristal |
+| **Élite** | I–III | Llama |
+| **Maestro** | I–III | Corona con alas |
+| **Ícono TURBOGOL** | único (top 100 por región) | Trofeo animado |
+
+- 4 divisiones (I–IV) por subnivel.
+- MMR con **Glicko-2**: rating, desviación y volatilidad.
+- **Temporadas** de 3 meses con *soft reset* y 10 partidas de clasificación.
+- **Recompensa** de temporada por victorias en tu rango.
+- **MMR visible** opcional desde Élite.
+
+---
+
+## 6. Reglas de partido
+
+- 5:00, gol de oro en el empate y fin cuando la pelota toca el piso en 0:00 (igual que el estándar del género).
+- Kickoff con 5 posiciones; en 1v1 se espeja.
+- Puntaje y estadísticas como se describe en el doc 01, §8.
+
+---
+
+## 7. Controles
+
+### Teclado y mouse (default)
+
+| Acción | Tecla |
+|---|---|
+| Acelerar / reversa / pitch | W / S |
+| Dirección / yaw | A / D |
+| Saltar | **Espacio** o click derecho |
+| Turbo | **Click izquierdo** o K |
+| Derrape + air roll libre | Shift izquierdo |
+| Air roll izq./der. | Q / E |
+| Cámara de pelota | C o rueda del mouse |
+| Resetear (juego libre) | R |
+| Pausa / menú | Esc |
+| Ayuda de controles | F1 |
+
+### Mando (Xbox/PS)
+
+| Acción | Botón |
+|---|---|
+| Acelerar / reversa | RT / LT |
+| Dirección | Stick izquierdo |
+| Saltar | A / ✕ |
+| Turbo | B / ○ |
+| Derrape + air roll | X / □ |
+| Cámara de pelota | Y / △ |
+| Air roll dirigido | LB / RB |
+| Mirar | Stick derecho |
+
+Reasignación completa en la F2.
+
+---
+
+## 8. Cámara (valores por defecto, configurables)
+
+| Parámetro | Valor |
+|---|---|
+| FOV | 110 (horizontal) |
+| Distancia | 270 |
+| Altura | 100 |
+| Ángulo | −4° |
+| Rigidez | 0.45 |
+| Velocidad de giro (swivel) | 4.5 |
+| Transición | 1.2 |
+
+- Arranca con **cámara de pelota** activada.
+
+---
+
+## 9. HUD
+
+| Zona | Contenido |
+|---|---|
+| Arriba al centro | Marcador Azul – Reloj – Rojo |
+| Abajo a la derecha | Medidor circular de turbo (0–100) con el número grande |
+| Arriba a la derecha | Feed de eventos (gol, atajada, demolición) |
+| Centro | Cuenta regresiva y "¡GOL!" con el nombre del goleador |
+| Sobre cada auto | Nombre y color del equipo |
+| Indicador | Ícono de "ball cam" activa |
+
+---
+
+## 10. Arquitectura técnica
+
+```
+src/
+  sim/      ← simulación pura (sin Three.js). Determinista, tick fijo 120 Hz.
+              Corre igual en navegador y en Node (servidor online futuro).
+    math.ts       vectores y cuaterniones propios
+    constants.ts  todos los números del estudio
+    arena.ts      geometría de la arena como SDF (función de distancia con signo):
+                  colisiones exactas con curvas, chaflanes, arcos y postes redondeados
+    car.ts        manejo, adherencia, salto, flip, control aéreo, turbo, supersónico
+    ball.ts       pelota (rebote con fricción y spin, drag, límites)
+    collide.ts    auto-pelota (con impulso extra), auto-auto (bump y demolición)
+    world.ts      partido: reloj, kickoff, goles, pads, eventos
+  ai/       ← bots (usan la misma API de input que un jugador humano)
+  render/   ← Three.js: estadio, autos procedurales, pelota, efectos, cámara
+  input/    ← teclado, mouse y mando unificados en un CarInput
+  audio/    ← sonido sintetizado con WebAudio (sin assets con licencia)
+  ui/       ← menús y HUD (HTML/CSS)
+```
+
+**Decisiones clave:**
+
+| Decisión | Por qué |
+|---|---|
+| **Web (TypeScript + Three.js + Vite)** | Se juega con un link, es multiplataforma y el servidor (Node) comparte el mismo código de simulación. Después se puede empaquetar para escritorio (Tauri/Electron) |
+| **Física propia, no un motor genérico** | Los motores genéricos (Rapier, Cannon) no reproducen el manejo del género. Controlar cada número es lo que da "el feel" |
+| **Arena como SDF** | Superficies curvas perfectas sin mallas de colisión; la malla visual se genera de la misma función, así que lo que ves es exactamente lo que colisiona |
+| **Render desacoplado con interpolación** | La física va a 120 Hz y el render a la frecuencia del monitor, interpolando entre ticks |
+| **Snapshots** | El render dibuja "snapshots". Repeticiones, clips y online reutilizan el mismo formato |
+
+### Plan online (F3–F4)
+
+| Pieza | Solución |
+|---|---|
+| Servidor | Node con la misma carpeta `sim/`, autoritativo a 120 Hz |
+| Transporte | WebSocket al principio; WebRTC DataChannel (UDP-like) para producción |
+| Cliente | Predicción + rollback/resimulación (como el estándar del género) |
+| Snapshots | 60 Hz |
+| Matchmaking | Por región, MMR (Glicko-2) y playlist |
+| Cuentas y datos | Supabase/Postgres 🔧 (perfiles, MMR, temporadas, clips) |
+| Despliegue | Cliente en hosting estático; servidores de partida en regiones (Fly.io / VPS) 🔧 |
+
+---
+
+## 11. Hoja de ruta
+
+| Fase | Contenido | Estado |
+|---|---|---|
+| **F1 — Núcleo jugable** | Arena, física completa (manejo, paredes, salto, flips, aéreos, derrape, turbo, supersónico, demoliciones), pelota, pads, goles, kickoff, reloj, HUD, cámara de pelota/auto, teclado y mando, bots 1v1/2v2/3v3, repetición de gol, audio sintetizado | ✅ **en este commit** |
+| F2 — Entrenamiento y clips | Packs de entrenamiento + editor + códigos, guardar clips (IndexedDB) y exportar, visor de repeticiones, ajustes de cámara/controles/gráficos, tutorial | Próxima |
+| F3 — Online casual | Servidor autoritativo, salas con código, predicción/rollback, chat rápido | |
+| F4 — Competitivo | Cuentas, matchmaking, MMR Glicko-2, rangos, temporadas, estadísticas | |
+| F5 — Contenido | Más estadios, cosméticos, progresión, modos extra, torneos | |
+| F6 — Pulido | Optimización, móviles con mando, escritorio, accesibilidad, anti-trampa | |
