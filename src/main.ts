@@ -22,6 +22,9 @@ import { Extras } from './training/extras.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
 import { DEFAULT_RULES, isDefaultRules, makeRules, MUTATORS, type Rules } from './sim/rules.ts';
 import { Challenges } from './challenges/challenges.ts';
+// Tipografía y tema visual: se cargan al final para pisar los estilos de cada módulo
+import '@fontsource-variable/archivo/wdth.css';
+import './theme.css';
 
 // ---------- Ajustes persistentes ----------
 interface Settings { camera: CameraSettings; volume: number; quality: QualityLevel; replays: boolean; bodyIndex: number; theme: Theme; mix: MixSettings }
@@ -441,6 +444,7 @@ class Game {
         const scorer = ev.scorerId >= 0 ? w.cars[ev.scorerId] : null;
         const own = scorer && scorer.team !== ev.team;
         this.setCenter('¡GOL!', 'pop goal' + ev.team, 2.8);
+        { const gf = $('goalFlash'); gf.className = ''; void gf.offsetWidth; gf.className = `go t${ev.team}`; }
         const kmh = Math.round(ev.speed * 0.036);
         $('subcenter').textContent = scorer ? `${scorer.name}${own ? ' (en contra)' : ''} · ${kmh} km/h` : `${kmh} km/h`;
         this.feed(scorer ? `⚽ ${scorer.name} anotó para ${TEAM_NAMES[ev.team]}` : `⚽ ¡Gol de ${TEAM_NAMES[ev.team]}!`, ev.team);
@@ -716,9 +720,29 @@ class Game {
     saveSettings(this.settings);
   }
 
+  /** Pestaña abierta en Ajustes. */
+  private settingsTab = 0;
+  private static readonly SETTING_TABS: [string, string[]][] = [
+    ['Cámara', ['fov', 'distance', 'height', 'angle', 'stiffness', 'swivel', 'transition', 'shake']],
+    ['Audio', ['volume', 'mix-motor', 'mix-efectos', 'mix-publico', 'mix-musica', 'mix-ui', 'haptics']],
+    ['Gráficos', ['quality', 'theme']],
+    ['Juego', ['replays']],
+  ];
+
   private buildSliders() {
     const box = $('sliders');
     box.innerHTML = '';
+    const tabs = document.createElement('div');
+    tabs.className = 'tabs';
+    Game.SETTING_TABS.forEach(([name], i) => {
+      const b = document.createElement('button');
+      b.textContent = name;
+      b.classList.toggle('on', i === this.settingsTab);
+      b.addEventListener('click', () => { this.settingsTab = i; this.audio.click(); this.buildSliders(); });
+      tabs.appendChild(b);
+    });
+    box.appendChild(tabs);
+    const visible = Game.SETTING_TABS[this.settingsTab][1];
     const cam = this.settings.camera;
     const defs: [string, string, number, number, number, () => number, (v: number) => void, (v: number) => string][] = [
       ['FOV', 'fov', 60, 110, 1, () => cam.fov, (v) => (cam.fov = v), (v) => String(v)],
@@ -729,15 +753,16 @@ class Game {
       ['Giro (swivel)', 'swivel', 1, 10, 0.5, () => cam.swivel, (v) => (cam.swivel = v), (v) => v.toFixed(1)],
       ['Transición', 'transition', 1, 2, 0.1, () => cam.transition, (v) => (cam.transition = v), (v) => v.toFixed(1)],
       ['Sacudida', 'shake', 0, 1, 1, () => (cam.shake ? 1 : 0), (v) => (cam.shake = v === 1), (v) => (v ? 'Sí' : 'No')],
-      ['Volumen', 'volume', 0, 1, 0.05, () => this.settings.volume, (v) => (this.settings.volume = v), (v) => `${Math.round(v * 100)}%`],
+      ['Volumen general', 'volume', 0, 1, 0.05, () => this.settings.volume, (v) => (this.settings.volume = v), (v) => `${Math.round(v * 100)}%`],
       ...(['motor', 'efectos', 'publico', 'musica', 'ui'] as const).map((k): [string, string, number, number, number, () => number, (v: number) => void, (v: number) => string] =>
-        [{ motor: '· Motor', efectos: '· Efectos', publico: '· Público', musica: '· Música', ui: '· Interfaz' }[k], 'mix-' + k, 0, 1, 0.05, () => this.settings.mix[k], (v) => (this.settings.mix[k] = v), (v) => `${Math.round(v * 100)}%`]),
+        [{ motor: 'Motor', efectos: 'Efectos', publico: 'Público', musica: 'Música', ui: 'Interfaz' }[k], 'mix-' + k, 0, 1, 0.05, () => this.settings.mix[k], (v) => (this.settings.mix[k] = v), (v) => `${Math.round(v * 100)}%`]),
       ['Vibración', 'haptics', 0, 1, 1, () => (this.settings.mix.haptics ? 1 : 0), (v) => (this.settings.mix.haptics = v === 1), (v) => (v ? 'Sí' : 'No')],
       ['Calidad', 'quality', 0, 3, 1, () => QUALITY_LEVELS.indexOf(this.settings.quality), (v) => (this.settings.quality = QUALITY_LEVELS[v] ?? 'alta'), (v) => QUALITY_LABELS[QUALITY_LEVELS[v] ?? 'alta']],
       ['Estadio', 'theme', 0, 1, 1, () => (this.settings.theme === 'dia' ? 0 : 1), (v) => (this.settings.theme = v ? 'noche' : 'dia'), (v) => (v ? 'Noche' : 'Día')],
       ['Repeticiones', 'replays', 0, 1, 1, () => (this.settings.replays ? 1 : 0), (v) => (this.settings.replays = v === 1), (v) => (v ? 'Sí' : 'No')],
     ];
     for (const [label, key, min, max, step, get, set, fmt] of defs) {
+      if (!visible.includes(key)) continue;
       const row = document.createElement('div');
       row.className = 'slider';
       row.innerHTML = `<label for="sl-${key}">${label}</label><input id="sl-${key}" type="range" min="${min}" max="${max}" step="${step}" value="${get()}"><output>${fmt(get())}</output>`;
