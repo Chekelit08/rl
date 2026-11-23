@@ -90,9 +90,38 @@ const OUT = process.argv[3] || '';
     await click('[data-act=closeControls]');
   });
 
-  // Menús agregados por otras fases: se prueban si existen
+  // Menús agregados por otras fases: se abren si existen y se vuelve con Escape (o el botón de volver)
   const extra = await page.evaluate(() => [...document.querySelectorAll('#menu [data-act]')].map((b) => b.getAttribute('data-act')));
   console.log('Menú principal:', extra.join(', '));
+  const base = new Set(['match', 'freeplay', 'settings', 'controls']);
+  for (const act of extra) {
+    if (base.has(act)) continue;
+    await step(`pantalla "${act}"`, async () => {
+      await click(`#menu [data-act="${act}"]`);
+      await page.waitForTimeout(2500);
+      await shot(`05-${act}`);
+      const menuVisible = () => page.evaluate(() => !document.getElementById('menu').classList.contains('hidden') && getComputedStyle(document.getElementById('menu')).display !== 'none');
+      if (await menuVisible()) {
+        // Algunas entradas abren primero un submenú del propio menú: está bien si no hubo errores
+        return;
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(1500);
+      if (!(await menuVisible())) {
+        await page.evaluate(() => {
+          const b = [...document.querySelectorAll('button, [data-act]')].find((el) => /volver|cerrar|atr[aá]s|men[uú]/i.test(el.textContent || '') && el.offsetParent !== null);
+          b?.click();
+        });
+        await page.waitForTimeout(1500);
+      }
+      if (!(await menuVisible())) {
+        const st = await game(() => window.__turbogol.state);
+        if (st !== 'menu') await game(() => window.__turbogol.quit());
+        await page.waitForTimeout(800);
+        if (!(await menuVisible())) throw new Error('no se pudo volver al menú');
+      }
+    });
+  }
 
   await browser.close();
   if (errors.length) {
