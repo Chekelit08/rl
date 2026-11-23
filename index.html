@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TURBOGOL</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -24,6 +25,7 @@
       <div class="subcenter" id="subcenter"></div>
       <div class="boost">
         <svg viewBox="0 0 120 120">
+          <circle class="ring-disc" cx="60" cy="60" r="41" />
           <circle class="ring-bg" cx="60" cy="60" r="50" />
           <circle class="ring" id="boostRing" cx="60" cy="60" r="50" />
         </svg>
@@ -44,23 +46,37 @@
 
     <!-- Menú principal -->
     <div id="menu" class="overlay">
-      <div class="menu-wrap">
-        <div class="logo">TURBO<span>GOL</span></div>
-        <div class="tagline">Fútbol con autos · Prototipo F1</div>
-        <div class="menu-buttons">
-          <button class="btn primary" data-act="match">Partido vs bots</button>
-          <button class="btn" data-act="ranked">Competitivo</button>
-          <button class="btn" data-act="freeplay">Juego libre</button>
-          <button class="btn" data-act="online">Online</button>
-          <button class="btn" data-act="challenges">Desafíos</button>
-          <button class="btn" data-act="training">Entrenamiento</button>
-          <button class="btn" data-act="replays">Repeticiones y clips</button>
-          <button class="btn" data-act="garage">Garage</button>
-          <button class="btn" data-act="profile">Perfil y estadísticas</button>
-          <button class="btn" data-act="settings">Ajustes</button>
-          <button class="btn" data-act="controls">Controles</button>
+      <div class="menu-top">
+        <div class="menu-brand">
+          <div class="logo">TURBO<span>GOL</span></div>
+          <div class="tagline">Fútbol con autos</div>
         </div>
-        <div class="soon">Próximamente: torneos · más estadios · modos extra</div>
+        <button class="player-card" data-act="profile" title="Perfil y estadísticas">
+          <span class="pc-level" id="pcLevel">1</span>
+          <span class="pc-body"><b id="pcName">Jugador</b><small id="pcRank">Nivel 1</small><span class="pc-bar"><i id="pcXp"></i></span></span>
+        </button>
+      </div>
+      <div class="menu-main">
+        <div class="menu-kicker">Jugar</div>
+        <div class="mode-row">
+          <button class="mode primary" data-act="match"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg><b>Partido rápido</b><small>1v1, 2v2 o 3v3 contra bots, con mutadores</small></button>
+          <button class="mode" data-act="ranked"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15l8-9 8 9M4 20l8-9 8 9" fill="none" stroke-width="2.4" stroke-linejoin="round"/></svg><b>Competitivo</b><small>Partidas con rango y temporadas</small></button>
+          <button class="mode" data-act="online"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke-width="2"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17" fill="none" stroke-width="1.8"/></svg><b>Online</b><small>Salas privadas con amigos</small></button>
+        </div>
+        <div class="menu-kicker">Practicar</div>
+        <div class="mode-row small">
+          <button class="mode" data-act="freeplay"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke-width="2"/><circle cx="12" cy="12" r="2.4"/><path d="M12 14.4V20M9.8 11l-5.6-2M14.2 11l5.6-2" fill="none" stroke-width="2"/></svg><b>Juego libre</b><small>La cancha para vos solo</small></button>
+          <button class="mode" data-act="challenges"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="5" ry="8.5" fill="none" stroke-width="2.4"/><path d="M2 12h6M16 12h6" fill="none" stroke-width="2"/></svg><b>Desafíos</b><small>Recorridos de aros contrarreloj</small></button>
+          <button class="mode" data-act="training"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke-width="2"/><circle cx="12" cy="12" r="4.5" fill="none" stroke-width="2"/><circle cx="12" cy="12" r="1.4"/></svg><b>Entrenamiento</b><small>Packs de tiros, atajadas y aéreos</small></button>
+          <button class="mode" data-act="replays"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2" fill="none" stroke-width="2"/><path d="M10 9.2v5.6l4.8-2.8z"/></svg><b>Repeticiones</b><small>Partidos y clips guardados</small></button>
+        </div>
+      </div>
+      <div class="menu-bar">
+        <button class="bar-btn" data-act="garage">Garage</button>
+        <button class="bar-btn" data-act="profile">Perfil</button>
+        <button class="bar-btn" data-act="settings">Ajustes</button>
+        <button class="bar-btn" data-act="controls">Controles</button>
+        <span class="bar-hint">Espacio: cámara · Clic derecho: saltar · Clic izquierdo: turbo</span>
       </div>
     </div>
 

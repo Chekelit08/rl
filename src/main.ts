@@ -6,7 +6,7 @@ import { AudioEngine, DEFAULT_MIX, type MixSettings } from './audio/audio.ts';
 import { InputManager } from './input/input.ts';
 import { CosmeticFx } from './garage/fxRender.ts';
 import { botLook, getLoadout, lookFromLoadout, setLoadout } from './garage/loadout.ts';
-import { getProfile, recordMatch, recordTier, type XpReport } from './progression/progression.ts';
+import { getProfile, levelInfo, recordMatch, recordTier, type XpReport } from './progression/progression.ts';
 import { bestTier, botDifficultyFor, getRanked, PLAYLISTS, recordRanked, type Playlist, type RankedOutcome } from './progression/ranked.ts';
 import { pickMvp } from './ui/postmatch.ts';
 import { pointsFor } from './ui/points.ts';
@@ -126,6 +126,7 @@ class Game {
     this.startWorld({ mode: 'match', teamSize: 2, duration: 300, unlimitedBoost: false, seed: 7 }, 1, true);
     this.wireMenus();
     this.buildMutators();
+    this.refreshPlayerCard();
     this.renderer.cosmetics = new CosmeticFx(this.renderer.scene, this.renderer.particles, this.renderer.smoke);
     this.ui = new UiManager({
       showMain: (id) => this.showOnly(id),
@@ -511,7 +512,11 @@ class Game {
     if (me && this.state !== 'menu') {
       const b = Math.round(me.boost);
       $('boostNum').textContent = String(b);
-      ($('boostRing') as unknown as SVGCircleElement).style.strokeDashoffset = String(314.16 * (1 - me.boost / 100));
+      ($('boostRing') as unknown as SVGCircleElement).style.strokeDashoffset = String(235.62 * (1 - me.boost / 100));
+      const gauge = $('boostNum').parentElement!;
+      gauge.classList.toggle('low', me.boost < 15 && !me.unlimitedBoost);
+      gauge.classList.toggle('full', me.boost >= 100);
+      gauge.classList.toggle('super', me.supersonic);
       $('speedChip').textContent = `${Math.round(me.speed() * 0.036)} km/h${me.supersonic ? ' · SUPERSÓNICO' : ''}`;
       $('camChip').textContent = this.renderer.camCtl.ballCam ? 'CÁMARA: PELOTA' : 'CÁMARA: AUTO';
     }
@@ -574,9 +579,20 @@ class Game {
 
   // ---------- Menús ----------
   private showOnly(id: string | null) {
+    if (id === 'menu') this.refreshPlayerCard();
     this.ui?.closeAll();
     this.challenges?.closeMenu();
     for (const o of ['menu', 'setup', 'settings', 'controls', 'pause', 'end']) $(o).classList.toggle('hidden', o !== id);
+  }
+
+  /** Tarjeta del jugador en el menú principal: nombre, nivel y progreso de XP. */
+  private refreshPlayerCard() {
+    const p = getProfile();
+    const li = levelInfo(p.xp);
+    $('pcName').textContent = p.name;
+    $('pcLevel').textContent = String(li.level);
+    $('pcRank').textContent = `Nivel ${li.level} · ${li.into}/${li.need} XP`;
+    $('pcXp').style.width = `${Math.round(li.frac * 100)}%`;
   }
 
   private back() {

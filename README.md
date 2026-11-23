@@ -24,7 +24,7 @@ Build de producción: `npm run build` (sale en `dist/`, es estático y se puede 
   - oclusión ambiental (GTAO), antialiasing MSAA x4 y gradación de color;
   - césped con detalle fotográfico y franjas de corte que cambian según desde dónde lo mirás;
   - sombras de contacto bajo los autos, marcas de neumáticos al derrapar y luces de freno.
-- **Autos realistas:** 6 carrocerías esculpidas, pintura con barniz, llantas, neumáticos, luces y alerón.
+- **Autos:** 6 carrocerías propias con pasarruedas, guardabarros y luces integradas a la superficie; pintura con barniz, llantas y alerón. Ver `docs/12-autos-e-interfaz.md`.
 - **Física del auto** calibrada con los números del estudio:
   - acelerador, freno, giro según velocidad y derrape analógico;
   - adherencia a paredes; en el techo te caés;

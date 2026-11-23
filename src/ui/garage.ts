@@ -34,9 +34,9 @@ export class Garage {
   private particles = new Particles();
   private smoke = new Particles({ additive: false, grow: 3.5 });
   private fx: CosmeticFx;
-  private az = 0.9;
-  private el_ = 0.3;
-  private dist = 400;
+  private az = 0.75;
+  private el_ = 0.22;
+  private dist = 300;
   private spin = 0;
   private dragging = false;
   private turbo = false;

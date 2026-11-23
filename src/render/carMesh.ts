@@ -21,6 +21,11 @@ interface Design {
   spoiler: 'wing' | 'lip' | 'none';
   n: number; // exponente de la superelipse (más alto = más cuadrado)
   scoop: boolean; // toma de aire en el capó
+  nTop?: number; // redondez de hombros y capó
+  tumble?: number; // cierre de los laterales hacia arriba
+  flare?: number; // guardabarros
+  /** Faros: tramo angular (en vueltas de π desde el lateral) y largo. */
+  lights?: { t0: number; t1: number; len: number };
 }
 
 const DESIGNS: Record<string, Design> = {
@@ -69,19 +74,76 @@ function sampleKeys(keys: Key[], x: number): Key {
   return [x, cr(p0[1], p1[1], p2[1], p3[1]), cr(p0[2], p1[2], p2[2], p3[2]), cr(p0[3], p1[3], p2[3], p3[3])];
 }
 
+/** Pasarruedas: centro (x, z) en coordenadas del chasis, radio y desde qué |y| recorta. */
+interface Arch { x: number; z: number; r: number; yIn: number }
+interface LoftOpts {
+  stations?: number; ring?: number; fixedBot?: number; botScale?: number; x0?: number; x1?: number;
+  /** Exponente de la mitad superior (más bajo = hombros más redondos). Por defecto, el mismo que abajo. */
+  nTop?: number;
+  /** Cuánto se cierran los laterales hacia arriba (0–0.3). */
+  tumble?: number;
+  arches?: Arch[];
+  /** Ensanche de los guardabarros sobre las ruedas (0–0.1). */
+  flare?: number;
+}
+type Surface = (x: number, th: number, s?: number) => [number, number, number];
+
 /**
- * Superficie "loft": secciones de superelipse a lo largo de X. Los extremos se cierran con tapas redondeadas.
- * botScale estrecha la mitad inferior (deja ver las ruedas como en un auto real).
+ * Superficie de la carrocería: sección de auto (piso plano, laterales con hombro) a lo largo de X,
+ * con pasarruedas recortados y guardabarros ensanchados. th = ángulo desde el lateral (−π/2 abajo, π/2 techo).
+ */
+function makeSurface(keys: Key[], L: number, W: number, H: number, n: number, opts: LoftOpts = {}): Surface {
+  const x0 = opts.x0 ?? keys[0][0], x1 = opts.x1 ?? keys[keys.length - 1][0];
+  const eBot = 2 / n, eTop = 2 / (opts.nTop ?? n);
+  const tumble = opts.tumble ?? 0, flare = opts.flare ?? 0;
+  const arches = opts.arches ?? [];
+  return (x, th, s = 1) => {
+    const k = sampleKeys(keys, Math.min(Math.max(x, x0), x1));
+    const top = k[1] * H, bot = (opts.fixedBot ?? k[2]) * H;
+    const zc = (top + bot) / 2, hh = ((top - bot) / 2) * s, hw = ((k[3] * W) / 2) * s;
+    const c = Math.cos(th), sn = Math.sin(th);
+    const e = sn >= 0 ? eTop : eBot;
+    const pw = (v: number) => Math.sign(v) * Math.pow(Math.abs(v), e);
+    let y = pw(c) * hw;
+    let z = zc + pw(sn) * hh;
+    if (sn < 0) y *= 1 - (1 - (opts.botScale ?? 1)) * Math.abs(sn);
+    else y *= 1 - tumble * sn;
+    const X = x * L;
+    for (const a of arches) {
+      const dx = X - a.x;
+      if (flare && Math.abs(c) > 0.35) y *= 1 + flare * Math.exp(-((dx / (a.r * 1.25)) ** 2)) * Math.min(1, (Math.abs(c) - 0.35) * 3);
+      const ay = Math.abs(y);
+      // Guardabarros: donde la rueda es más alta que la carrocería, el lateral sube en una loma sobre la rueda
+      const rf = a.r * 1.22;
+      if (Math.abs(dx) < rf && sn >= 0) {
+        // Sube de a poco desde el centro del capó hasta el lateral (sin "aleta")
+        const y0 = a.yIn * 0.35, y1 = a.yIn + 4;
+        const wy = Math.min(1, Math.max(0, (ay - y0) / (y1 - y0)));
+        const wx = 1 - (dx / rf) ** 2;
+        const zf = a.z + a.r * 1.02 * Math.sqrt(wx) + 1.2;
+        if (z < zf) z += (zf - z) * wy * wy * (3 - 2 * wy);
+      }
+      // Pasarruedas: el borde inferior del lateral sigue el arco de la rueda
+      if (Math.abs(dx) < a.r && ay > a.yIn && sn < 0) {
+        const zmin = a.z + Math.sqrt(a.r * a.r - dx * dx);
+        if (z < zmin) z = zmin;
+      }
+    }
+    return [X, y, z];
+  };
+}
+
+/**
+ * Malla "loft" de una superficie. Los extremos se cierran con tapas redondeadas.
  * UV: u = (x + 0.55) / 1.1 (atrás→adelante), v = ángulo/2π desde abajo (0.25 lateral izq., 0.5 techo, 0.75 lateral der.).
  */
-function loft(keys: Key[], L: number, W: number, H: number, n: number, opts: { stations?: number; ring?: number; fixedBot?: number; botScale?: number; x0?: number; x1?: number } = {}) {
+function loft(keys: Key[], L: number, W: number, H: number, n: number, opts: LoftOpts = {}) {
   const stations = opts.stations ?? 30, ring = opts.ring ?? 32;
   const x0 = opts.x0 ?? keys[0][0], x1 = opts.x1 ?? keys[keys.length - 1][0];
+  const sf = makeSurface(keys, L, W, H, n, opts);
   const pos: number[] = [];
   const uv: number[] = [];
   const idx: number[] = [];
-  const e = 2 / n;
-  const sgnPow = (v: number) => Math.sign(v) * Math.pow(Math.abs(v), e);
   const capRounds = 3;
   const xs: { x: number; s: number }[] = [];
   for (let r = capRounds; r >= 1; r--) xs.push({ x: x0 - (r / capRounds) * 0.012, s: Math.sqrt(1 - (r / (capRounds + 0.5)) ** 2) });
@@ -89,15 +151,11 @@ function loft(keys: Key[], L: number, W: number, H: number, n: number, opts: { s
   for (let r = 1; r <= capRounds; r++) xs.push({ x: x1 + (r / capRounds) * 0.012, s: Math.sqrt(1 - (r / (capRounds + 0.5)) ** 2) });
 
   const cols = ring + 1;
-  for (const { x, s } of xs) {
-    const k = sampleKeys(keys, Math.min(Math.max(x, x0), x1));
-    const top = k[1] * H, bot = (opts.fixedBot ?? k[2]) * H;
-    const zc = (top + bot) / 2, hh = ((top - bot) / 2) * s, hw = (k[3] * W) / 2 * s;
+  for (const { x, s: sc } of xs) {
     for (let j = 0; j <= ring; j++) {
       const th = -Math.PI / 2 + (j / ring) * Math.PI * 2;
-      const c = Math.cos(th), sn = Math.sin(th);
-      const lower = sn < 0 ? (opts.botScale ?? 1) : 1;
-      pos.push(x * L, sgnPow(c) * hw * (sn < 0 ? 1 - (1 - lower) * Math.abs(sn) : 1), zc + sgnPow(sn) * hh);
+      const [X, Y, Z] = sf(Math.min(Math.max(x, x0), x1), th, sc);
+      pos.push(x * L, Y, Z);
       uv.push((x + 0.55) / 1.1, j / ring);
     }
   }
@@ -105,7 +163,8 @@ function loft(keys: Key[], L: number, W: number, H: number, n: number, opts: { s
   for (let r = 0; r < rows - 1; r++) {
     for (let j = 0; j < ring; j++) {
       const a = r * cols + j, b = a + 1, c = (r + 1) * cols + j, d = c + 1;
-      idx.push(a, c, b, b, c, d);
+      // Caras hacia afuera (antihorario visto desde afuera): antes estaban invertidas y se veía el interior
+      idx.push(a, b, c, b, d, c);
     }
   }
   // Tapas
@@ -125,6 +184,34 @@ function loft(keys: Key[], L: number, W: number, H: number, n: number, opts: { s
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Parche que copia la superficie (tramo x0..x1, ángulo t0..t1) desplazado hacia afuera: luces y molduras al ras. */
+function surfacePatch(sf: Surface, x0: number, x1: number, t0: number, t1: number, off: number, nx = 10, nt = 8) {
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const P = (x: number, t: number) => new THREE.Vector3(...sf(x, t));
+  for (let i = 0; i <= nx; i++) {
+    for (let j = 0; j <= nt; j++) {
+      const x = x0 + ((x1 - x0) * i) / nx, t = t0 + ((t1 - t0) * j) / nt;
+      const p = P(x, t);
+      const nrm = P(x + 0.004, t).sub(P(x - 0.004, t)).cross(P(x, t + 0.02).sub(P(x, t - 0.02))).normalize();
+      // La normal debe apuntar hacia afuera del eje del auto
+      const out = new THREE.Vector3(0, Math.cos(t), Math.sin(t));
+      if (nrm.dot(out) < 0) nrm.negate();
+      p.addScaledVector(nrm, off);
+      pos.push(p.x, p.y, p.z);
+    }
+  }
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nt; j++) {
+    const a = i * (nt + 1) + j, b = a + 1, c = a + nt + 1, d = c + 1;
+    idx.push(a, c, b, b, c, d);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
@@ -314,7 +401,12 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   const group = new THREE.Group();
   const [L, W, H] = body.size;
   const [ox, , oz] = body.offset;
-  const d = DESIGNS[body.id] ?? DESIGNS.toro;
+  const d0 = DESIGNS[body.id] ?? DESIGNS.toro;
+  // El hitbox del género flota sobre las ruedas; la carrocería visible baja hasta casi el piso (despeje ≈ 6 uu),
+  // así las ruedas quedan dentro de los pasarruedas y el auto no parece levantado.
+  const drop = (17 - 6 + oz) / (0.45 * H);
+  const d: Design = { ...d0, body: d0.body.map(([x, t, bt, w]) => [x, t, bt * drop, w] as Key) };
+  const zb = -0.45 * drop * H; // piso de la carrocería (coordenadas del chasis)
 
   const decalTex = new THREE.CanvasTexture(paintDecal({ decal: look.decal, paint: look.paint, secondary: look.secondary, number: look.decalNumber, L, W, H }));
   decalTex.colorSpace = THREE.SRGBColorSpace;
@@ -332,7 +424,12 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   chassis.position.set(ox, 0, oz);
   group.add(chassis);
 
-  const bodyMesh = new THREE.Mesh(loft(d.body, L, W, H, d.n, { botScale: 0.86 }), bodyMat);
+  // Pasarruedas recortados en la carrocería (coordenadas del chasis)
+  const wheelY = (wd: { y: number }) => Math.max(wd.y, W * 0.5 * 0.9 - 7.5);
+  const arches: Arch[] = [body.frontWheel, body.backWheel].map((wd) => ({ x: wd.x - ox, z: -17 + wd.r - oz, r: wd.r + 3.4, yIn: wheelY(wd) - 10 }));
+  const bodyOpts: LoftOpts = { botScale: 0.9, nTop: d.nTop ?? 2.5, tumble: d.tumble ?? 0.1, arches, flare: d.flare ?? 0.05, stations: 72, ring: 48 };
+  const bodySurf = makeSurface(d.body, L, W, H, d.n, bodyOpts);
+  const bodyMesh = new THREE.Mesh(loft(d.body, L, W, H, d.n, bodyOpts), bodyMat);
   bodyMesh.castShadow = true;
   chassis.add(bodyMesh);
   const cabin = new THREE.Mesh(loft(d.cabin, L, W, H, 2.6, { fixedBot: -0.05, stations: 20 }), glassMat);
@@ -344,84 +441,64 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   roof.castShadow = true;
   chassis.add(roof);
 
-  const front = sampleKeys(d.body, 0.5);
   const rearK = sampleKeys(d.body, -0.5);
 
   for (const sy of [-1, 1]) {
-    // Zócalos laterales
-    const sill = new THREE.Mesh(new THREE.BoxGeometry(L * 0.62, 2.5, H * 0.16), carbonMat);
-    sill.position.set(-L * 0.04, sy * W * 0.44, -H * 0.36);
-    chassis.add(sill);
-    // Franja de acento (color secundario)
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(L * 0.62, 0.8, 1.4), accentMat);
-    stripe.position.set(-L * 0.04, sy * W * 0.452, -H * 0.27);
-    chassis.add(stripe);
-    // Toma de aire lateral
-    const intake = new THREE.Mesh(new THREE.BoxGeometry(L * 0.08, 1.6, H * 0.17), trimMat);
-    intake.position.set(-L * 0.2, sy * W * 0.47, -H * 0.1);
-    intake.rotation.z = sy * 0.12;
-    chassis.add(intake);
     // Espejos
     const cab = sampleKeys(d.cabin, d.cabin[d.cabin.length - 1][0] - 0.06);
-    const mirror = new THREE.Mesh(new THREE.BoxGeometry(5, 7, 4), bodyMat);
+    const mirror = new THREE.Mesh(new THREE.SphereGeometry(3.2, 10, 8).scale(1.1, 1.3, 0.8), bodyMat);
     mirror.position.set(cab[0] * L, sy * W * (cab[3] * 0.5 + 0.08), cab[1] * H * 0.4);
     const mirrorArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 1.2), darkMat);
     mirrorArm.position.set(cab[0] * L - 1, sy * W * (cab[3] * 0.5 + 0.03), cab[1] * H * 0.38);
     chassis.add(mirror, mirrorArm);
   }
 
-  // Parrilla y splitter delantero
-  const grille = new THREE.Mesh(new THREE.BoxGeometry(3, W * 0.52, H * 0.15), trimMat);
-  grille.position.set(L * 0.505, 0, (front[2] + 0.11) * H);
+  // Trompa: parrilla central sobre la punta, tomas de aire en las esquinas (al ras de la carrocería) y splitter
+  const xTip = d.body[d.body.length - 1][0];
+  const tip = sampleKeys(d.body, xTip);
+  const tipH = (tip[1] - tip[2]) * H, tipZ = ((tip[1] + tip[2]) / 2) * H, tipW = tip[3] * W;
+  const gx = (xTip + 0.012) * L;
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(2.4, tipW * 0.5, tipH * 0.3), trimMat);
+  grille.position.set(gx - 0.5, 0, tipZ - tipH * 0.06);
   chassis.add(grille);
-  for (let i = -2; i <= 2; i++) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.2, W * 0.5, 0.5), chromeMat);
-    slat.position.set(L * 0.512, 0, (front[2] + 0.11) * H + i * H * 0.024);
+  for (let i = -1; i <= 1; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(1, tipW * 0.47, 0.45), carbonMat);
+    slat.position.set(gx + 0.5, 0, tipZ - tipH * 0.06 + i * tipH * 0.085);
     chassis.add(slat);
   }
-  const splitter = new THREE.Mesh(new THREE.BoxGeometry(L * 0.07, W * 0.92, 1.1), carbonMat);
-  splitter.position.set(L * 0.49, 0, front[2] * H - 0.5);
-  chassis.add(splitter);
-
-  // Toma de aire en el capó
-  if (d.scoop) {
-    const hk = sampleKeys(d.body, 0.22);
-    const scoop = new THREE.Mesh(new THREE.BoxGeometry(L * 0.14, W * 0.26, 2.6), bodyMat);
-    scoop.position.set(L * 0.22, 0, hk[1] * H + 0.8);
-    scoop.rotation.y = -0.1;
-    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.8, W * 0.22, 1.6), trimMat);
-    mouth.position.set(L * 0.29, 0, hk[1] * H + 1);
-    chassis.add(scoop, mouth);
+  const intakeMat = new THREE.MeshPhysicalMaterial({ color: '#08090c', metalness: 0.3, roughness: 0.35, clearcoat: 0.6, side: THREE.DoubleSide });
+  for (const sy of [-1, 1]) {
+    const T = (t: number) => (sy > 0 ? t * Math.PI : Math.PI - t * Math.PI);
+    chassis.add(new THREE.Mesh(surfacePatch(bodySurf, xTip - 0.07, xTip - 0.004, T(-0.3), T(-0.06), 0.3, 8, 8), intakeMat));
   }
+  const splitter = new THREE.Mesh(new THREE.BoxGeometry(L * 0.06, tipW * 0.82, 1.1), carbonMat);
+  splitter.position.set((xTip - 0.02) * L, 0, tip[2] * H + 0.3);
+  chassis.add(splitter);
 
   // Faros: carcasa oscura + lente emisiva + luz diurna (DRL)
   const lensMat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#e9f4ff', emissiveIntensity: 2.2, roughness: 0.1 });
   const drlMat = new THREE.MeshBasicMaterial({ color: '#dff0ff' });
   const brake = new THREE.MeshBasicMaterial({ color: '#7a0a18' });
+  const lightMatSide = { side: THREE.DoubleSide };
+  lensMat.side = THREE.DoubleSide;
+  const xMax = d.body[d.body.length - 1][0], xMin = d.body[0][0];
+  const lg = d.lights ?? { t0: 0.17, t1: 0.3, len: 0.085 };
+  const housingMat = new THREE.MeshPhysicalMaterial({ color: '#0a0b0e', metalness: 0.4, roughness: 0.2, clearcoat: 1, ...lightMatSide });
+  const brakeSide = brake; brakeSide.side = THREE.DoubleSide;
+  const drlSide = drlMat; drlSide.side = THREE.DoubleSide;
   for (const sy of [-1, 1]) {
-    const hx = L * 0.485, hy = sy * W * front[3] * 0.3, hz = (front[1] - 0.06) * H;
-    const housing = new THREE.Mesh(new THREE.BoxGeometry(5, W * 0.21, 4.2), carbonMat);
-    housing.position.set(hx - 0.6, hy, hz);
-    housing.rotation.y = -0.25;
-    const lens = new THREE.Mesh(new THREE.BoxGeometry(5.2, W * 0.12, 2.4), lensMat);
-    lens.position.set(hx, hy - sy * W * 0.03, hz + 0.2);
-    lens.rotation.y = -0.25;
-    const drl = new THREE.Mesh(new THREE.BoxGeometry(5.4, W * 0.19, 0.6), drlMat);
-    drl.position.set(hx, hy, hz - 1.7);
-    drl.rotation.y = -0.25;
-    chassis.add(housing, lens, drl);
-    // Faros traseros
-    const tx = -L * 0.515, ty = sy * W * rearK[3] * 0.3, tz = (rearK[1] - 0.08) * H;
-    const tHousing = new THREE.Mesh(new THREE.BoxGeometry(2, W * 0.25, 4.4), carbonMat);
-    tHousing.position.set(tx + 0.5, ty, tz);
-    const tLight = new THREE.Mesh(new THREE.BoxGeometry(2, W * 0.22, 2.6), brake);
-    tLight.position.set(tx - 0.2, ty, tz);
-    chassis.add(tHousing, tLight);
+    const T = (t: number) => (sy > 0 ? t * Math.PI : Math.PI - t * Math.PI);
+    // Faro: carcasa negra brillante al ras, lente emisiva fina y luz diurna debajo
+    const hx1 = xMax - 0.004, hx0 = hx1 - lg.len;
+    chassis.add(new THREE.Mesh(surfacePatch(bodySurf, hx0 - 0.012, hx1, T(lg.t0 - 0.035), T(lg.t1 + 0.03), 0.25), housingMat));
+    chassis.add(new THREE.Mesh(surfacePatch(bodySurf, hx0 + 0.01, hx1, T(lg.t0 + 0.02), T(lg.t1), 0.6), lensMat));
+    chassis.add(new THREE.Mesh(surfacePatch(bodySurf, hx0 - 0.004, hx1, T(lg.t0 - 0.022), T(lg.t0 - 0.004), 0.6, 10, 2), drlSide));
+    // Farol trasero que envuelve la esquina
+    chassis.add(new THREE.Mesh(surfacePatch(bodySurf, xMin + 0.004, xMin + 0.06, T(0.1), T(0.3), 0.3), housingMat));
+    chassis.add(new THREE.Mesh(surfacePatch(bodySurf, xMin + 0.006, xMin + 0.05, T(0.13), T(0.27), 0.65), brakeSide));
   }
-  // Tira LED trasera de lado a lado
-  const ledBar = new THREE.Mesh(new THREE.BoxGeometry(1.4, W * 0.5, 0.7), brake);
-  ledBar.position.set(-L * 0.518, 0, (rearK[1] - 0.08) * H + 1.6);
-  chassis.add(ledBar);
+  // Tira LED trasera de lado a lado, sobre el borde de la cola
+  chassis.add(new THREE.Mesh(surfacePatch(bodySurf, xMin + 0.006, xMin + 0.022, 0.27 * Math.PI, 0.73 * Math.PI, 0.65, 3, 20), brakeSide));
 
   // Alerón
   if (d.spoiler === 'wing') {
@@ -461,7 +538,7 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   for (const [wd, isFront] of [[body.frontWheel, true], [body.backWheel, false]] as const) {
     for (const sy of [-1, 1]) {
       const w = buildWheel(wd.r, look.wheel, tireMat, darkMat);
-      const y = Math.max(wd.y, W * 0.5 * 0.86 - 7.5);
+      const y = wheelY(wd);
       w.position.set(wd.x, sy * y, -17 + wd.r);
       group.add(w);
       wheels.push(w);
@@ -475,7 +552,8 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
 
   // Llama del turbo (los colores dependen de la estela elegida; ver garage/fxRender)
   const flame = new THREE.Group();
-  const rear = new THREE.Vector3(ox - L / 2 - 2, 0, oz + (rearK[2] + 0.16) * H);
+  // Tobera del turbo: asoma por detrás de la cola (la carrocería ahora es cerrada)
+  const rear = new THREE.Vector3(ox + (d.body[0][0] - 0.014) * L - 1.5, 0, oz + ((rearK[1] + rearK[2]) / 2 - 0.04) * H);
   flame.position.copy(rear);
   const flameMats: THREE.MeshBasicMaterial[] = [];
   const mkCone = (r: number, len: number, col: string | THREE.Color, op: number, x: number) => {
@@ -489,12 +567,12 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   flame.add(mkCone(10, 80, TEAM_COLORS_LIGHT[team], 0.55, -40), mkCone(6.5, 50, BOOST_COLOR, 0.85, -25), mkCone(3.5, 26, '#ffffff', 0.9, -13));
   flame.visible = false;
   group.add(flame);
-  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(7.5, 9.5, 9, 16, 1, true), chromeMat);
+  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 6.4, 9, 18, 1, true), new THREE.MeshStandardMaterial({ color: '#3a3f48', metalness: 1, roughness: 0.28, side: THREE.DoubleSide }));
   nozzle.rotation.z = Math.PI / 2;
-  nozzle.position.copy(rear).add(new THREE.Vector3(4, 0, 0));
-  const nozzleCore = new THREE.Mesh(new THREE.CircleGeometry(7.2, 16), new THREE.MeshBasicMaterial({ color: '#ff9a3d' }));
+  nozzle.position.copy(rear).add(new THREE.Vector3(1.5, 0, 0));
+  const nozzleCore = new THREE.Mesh(new THREE.CircleGeometry(5.1, 18), new THREE.MeshBasicMaterial({ color: '#160a05' }));
   nozzleCore.rotation.y = -Math.PI / 2;
-  nozzleCore.position.copy(rear).add(new THREE.Vector3(6, 0, 0));
+  nozzleCore.position.copy(rear).add(new THREE.Vector3(-1, 0, 0));
   group.add(nozzle, nozzleCore);
 
   return { group, frontWheels, wheels, flame, flameMats, bodyMat, wheelRadius: body.backWheel.r, rearOffset: rear, brakeLights: brake, look };
