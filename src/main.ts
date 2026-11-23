@@ -3,6 +3,13 @@
 import { BallPredictor, Bot, type Difficulty, DIFFICULTY_NAMES } from './ai/bot.ts';
 import { AudioEngine } from './audio/audio.ts';
 import { InputManager } from './input/input.ts';
+import { CosmeticFx } from './garage/fxRender.ts';
+import { botLook, getLoadout, lookFromLoadout, setLoadout } from './garage/loadout.ts';
+import { getProfile, recordMatch, recordTier, type XpReport } from './progression/progression.ts';
+import { bestTier, botDifficultyFor, getRanked, PLAYLISTS, recordRanked, type Playlist, type RankedOutcome } from './progression/ranked.ts';
+import { pickMvp } from './ui/postmatch.ts';
+import { pointsFor } from './ui/points.ts';
+import { UiManager } from './ui/ui.ts';
 import { DEFAULT_CAMERA, type CameraSettings } from './render/camera.ts';
 import { GameRenderer } from './render/renderer.ts';
 import type { Theme } from './render/stadium.ts';
@@ -85,6 +92,12 @@ class Game {
   private setupMode: 'match' | 'freeplay' = 'match';
   private setupValues = { teamSize: 1, difficulty: 1, duration: 300, unlimited: 0 };
   private returnTo: 'menu' | 'pause' = 'menu';
+  ui!: UiManager;
+  /** Partida competitiva en curso (contra bots, con rango). */
+  private ranked: { playlist: Playlist; diffs: number[] } | null = null;
+  private matchDone = false;
+  private report: { xp: XpReport | null; ranked: RankedOutcome | null } = { xp: null, ranked: null };
+  private tally = { clears: 0, centers: 0, aerialHits: 0, firstTouches: 0, epicSaves: 0, fastestGoalKmh: 0 };
 
   constructor() {
     const app = $('app');
@@ -95,19 +108,28 @@ class Game {
     // Mundo de fondo para el menú (bots jugando)
     this.startWorld({ mode: 'match', teamSize: 2, duration: 300, unlimitedBoost: false, seed: 7 }, 1, true);
     this.wireMenus();
+    this.renderer.cosmetics = new CosmeticFx(this.renderer.scene, this.renderer.particles, this.renderer.smoke);
+    this.ui = new UiManager({
+      showMain: (id) => this.showOnly(id),
+      startRanked: (p) => this.startRanked(p),
+      input: this.input,
+      renderer: this.renderer,
+      chatCars: () => this.world.cars.map((c) => ({ id: c.id, team: c.team, name: c.name, isBot: c.isBot })),
+    }, $('hud'));
     $('loading').classList.add('hidden');
     requestAnimationFrame((t) => this.frame(t));
   }
 
   // ---------- Partidas ----------
-  startWorld(cfg: MatchConfig, difficulty: Difficulty, attract = false) {
+  startWorld(cfg: MatchConfig, difficulty: Difficulty, attract = false, botDiffs?: number[]) {
     this.world = new World(cfg);
     this.bots.clear();
     const names: string[] = [];
-    const body = this.settings.bodyIndex;
+    const body = getLoadout().body;
+    const myName = getProfile().name;
     if (!attract) {
-      this.world.addCar(0, 'Vos', body, false);
-      names.push('Vos');
+      this.world.addCar(0, myName, body, false);
+      names.push(myName);
     }
     if (cfg.mode === 'match' || attract) {
       let bi = 0;
@@ -115,14 +137,17 @@ class Game {
         const count = cfg.teamSize - (team === 0 && !attract ? 1 : 0);
         for (let i = 0; i < count; i++) {
           const c = this.world.addCar(team, World.botName(bi), (bi * 2 + 1) % CAR_BODIES.length, true);
-          this.bots.set(c.id, new Bot(c, attract ? 1 : difficulty));
+          this.bots.set(c.id, new Bot(c, attract ? 1 : ((botDiffs?.[bi] ?? difficulty) as Difficulty)));
           bi++;
         }
       }
     }
     this.world.setupKickoff();
     if (cfg.mode === 'freeplay') this.world.resetFreeplay(this.world.cars[0]);
-    this.renderer.setupCars(this.world.cars.map((c) => ({ id: c.id, team: c.team, bodyIndex: CAR_BODIES.indexOf(c.body), name: c.name })), attract ? -1 : 0);
+    this.renderer.setupCars(this.world.cars.map((c) => ({
+      id: c.id, team: c.team, bodyIndex: CAR_BODIES.indexOf(c.body), name: c.name,
+      look: c.isBot ? botLook(cfg.seed + c.id * 31, c.team) : lookFromLoadout(getLoadout(), c.team),
+    })), attract ? -1 : 0);
     this.renderer.camCtl.snapTo();
     this.curSnap = this.world.snapshot();
     this.prevSnap = this.curSnap;
@@ -132,6 +157,11 @@ class Game {
     if (!attract) {
       this.lastCfg = cfg;
       this.lastDifficulty = difficulty;
+      this.matchDone = false;
+      this.report = { xp: null, ranked: null };
+      this.tally = { clears: 0, centers: 0, aerialHits: 0, firstTouches: 0, epicSaves: 0, fastestGoalKmh: 0 };
+      this.ui?.points.reset();
+      this.ui?.chat.reset();
     }
     $<HTMLDivElement>('feed').innerHTML = '';
     this.setCenter('');
@@ -140,6 +170,7 @@ class Game {
 
   play(mode: 'match' | 'freeplay') {
     const v = this.setupValues;
+    this.ranked = null;
     const cfg: MatchConfig = {
       mode,
       teamSize: mode === 'match' ? v.teamSize : 1,
@@ -157,15 +188,42 @@ class Game {
     this.state = 'playing';
   }
 
+  /** Partida competitiva: 1v1, 2v2 o 3v3 contra bots cuya dificultad sale del MMR del jugador. */
+  startRanked(p: Playlist) {
+    const size = PLAYLISTS.find((x) => x.id === p)!.teamSize;
+    this.ranked = { playlist: p, diffs: this.rankedDiffs(p) };
+    this.audio.start();
+    this.startWorld({ mode: 'match', teamSize: size, duration: 300, unlimitedBoost: false, seed: Math.floor(Math.random() * 1e9) }, 1, false, this.ranked.diffs);
+    this.showOnly(null);
+    $('hud').classList.remove('hidden');
+    $('hint').textContent = `Competitivo ${p} · Tab: puntajes · 1–4: chat rápido · Esc: pausa`;
+    this.state = 'playing';
+  }
+
+  private rankedDiffs(p: Playlist): number[] {
+    const size = PLAYLISTS.find((x) => x.id === p)!.teamSize;
+    const r = getRanked()[p].r;
+    return Array.from({ length: 2 * size - 1 }, () => botDifficultyFor(r, Math.random));
+  }
+
   restart() {
     if (!this.lastCfg) return;
-    this.startWorld({ ...this.lastCfg, seed: Math.floor(Math.random() * 1e9) }, this.lastDifficulty);
+    if (this.ranked) this.ranked.diffs = this.rankedDiffs(this.ranked.playlist);
+    this.startWorld({ ...this.lastCfg, seed: Math.floor(Math.random() * 1e9) }, this.lastDifficulty, false, this.ranked?.diffs);
     this.showOnly(null);
     $('hud').classList.remove('hidden');
     this.state = 'playing';
   }
 
   quit() {
+    // Abandonar una competitiva en curso cuenta como derrota
+    if (this.ranked && !this.matchDone && this.world.cfg.mode === 'match' && this.state !== 'menu') {
+      this.matchDone = true;
+      const size = this.world.cfg.teamSize;
+      recordRanked(this.ranked.playlist, 0, this.ranked.diffs.slice(size - 1));
+      recordMatch({ playlist: `Competitivo ${this.ranked.playlist}`, won: false, draw: false, completed: false, score: [this.world.score[0], this.world.score[1]], myScore: this.world.cars[0].stats.score, mvp: false, seconds: 0, stats: {}, fastestGoalKmh: 0 });
+    }
+    this.ranked = this.state === 'menu' ? this.ranked : null;
     this.startWorld({ mode: 'match', teamSize: 2, duration: 300, unlimitedBoost: false, seed: 7 }, 1, true);
     $('hud').classList.add('hidden');
     this.showOnly('menu');
@@ -225,12 +283,39 @@ class Game {
       else w.setupKickoff();
     }
     if (w.phase === 'ended' && this.state === 'playing') {
+      this.finishMatch();
       this.endTimer = 3;
       this.state = 'ended';
     }
     if (this.state === 'menu' && w.phase === 'ended') {
       this.startWorld({ mode: 'match', teamSize: 2, duration: 300, unlimitedBoost: false, seed: Math.floor(Math.random() * 1e6) }, 1, true);
     }
+  }
+
+  /** Registra XP, estadísticas y (si corresponde) el rango al terminar el partido. */
+  private finishMatch() {
+    const w = this.world;
+    if (this.matchDone || w.cfg.mode !== 'match') return;
+    this.matchDone = true;
+    const me = w.cars[0];
+    const size = w.cfg.teamSize;
+    const mvp = pickMvp(w.cars, w.winner);
+    const won = w.winner === 0, draw = w.winner < 0;
+    const label = this.ranked ? `Competitivo ${this.ranked.playlist}` : `Casual ${size}v${size}`;
+    const xp = recordMatch({
+      playlist: label, won, draw, completed: true, score: [w.score[0], w.score[1]], myScore: me.stats.score, mvp: mvp?.id === 0,
+      seconds: w.cfg.duration, fastestGoalKmh: this.tally.fastestGoalKmh,
+      stats: {
+        goals: me.stats.goals, assists: me.stats.assists, saves: me.stats.saves, shots: me.stats.shots, demos: me.stats.demos,
+        epicSaves: this.tally.epicSaves, clears: this.tally.clears, centers: this.tally.centers, aerialHits: this.tally.aerialHits, firstTouches: this.tally.firstTouches,
+      },
+    });
+    let ranked: RankedOutcome | null = null;
+    if (this.ranked) {
+      ranked = recordRanked(this.ranked.playlist, draw ? 0.5 : won ? 1 : 0, this.ranked.diffs.slice(size - 1));
+      xp.unlocks.push(...recordTier(bestTier()));
+    }
+    this.report = { xp, ranked };
   }
 
   /** Avanza la simulación sin dibujar (pruebas). */
@@ -284,6 +369,22 @@ class Game {
     this.renderer.onEvent(ev, this.curSnap);
     if (this.state === 'menu') return;
     const me = w.cars[0];
+    if (w.cfg.mode === 'match' || w.cfg.mode === 'freeplay') {
+      for (const p of pointsFor(ev, 0, w.cars)) this.ui.points.add(p.label, p.pts, p.kind);
+    }
+    if (ev.type === 'feat' && ev.carId === 0) {
+      const t = this.tally;
+      if (ev.feat === 'clear') t.clears++; else if (ev.feat === 'center') t.centers++; else if (ev.feat === 'aerialhit') t.aerialHits++; else t.firstTouches++;
+    }
+    if (ev.type === 'save' && ev.carId === 0 && ev.epic) this.tally.epicSaves++;
+    if (ev.type === 'goal') {
+      if (ev.scorerId === 0 && w.cars[0].team === ev.team) this.tally.fastestGoalKmh = Math.max(this.tally.fastestGoalKmh, Math.round(ev.speed * 0.036));
+      this.ui.chat.react('goal', ev.team);
+      this.input.rumble(0.5, 0.9, ev.team === 0 ? 500 : 300);
+    }
+    if (ev.type === 'demo') { this.ui.chat.react('demo', w.cars[ev.attacker].team); if (ev.victim === 0) this.input.rumble(1, 0.6, 400); else if (ev.attacker === 0) this.input.rumble(0.4, 0.8, 200); }
+    if (ev.type === 'save') this.ui.chat.react('save', w.cars[ev.carId].team);
+    if (ev.type === 'bump' && (ev.attacker === 0 || ev.victim === 0)) this.input.rumble(0.3, 0.5, 120);
     switch (ev.type) {
       case 'hit': {
         const near = me ? me.pos.dist(ev.pos) < 1500 : true;
@@ -403,15 +504,20 @@ class Game {
   private showEnd() {
     const w = this.world;
     const myTeam = 0;
-    $('endTitle').textContent = w.winner === myTeam ? '¡Victoria!' : w.winner < 0 ? 'Empate' : 'Derrota';
-    $('endScore').innerHTML = `<span class="b">${w.score[0]}</span> – <span class="r">${w.score[1]}</span>`;
-    $('endTable').innerHTML = this.statsTable();
-    this.showOnly('end');
+    this.showOnly(null);
+    this.ui.post.show({
+      cars: w.cars.map((c) => ({ id: c.id, name: c.name, team: c.team, isBot: c.isBot, stats: c.stats })),
+      score: [w.score[0], w.score[1]], winner: w.winner, myId: 0, myTeam: myTeam,
+      label: this.ranked ? `Competitivo ${this.ranked.playlist}` : `Casual ${w.cfg.teamSize}v${w.cfg.teamSize}`,
+      xp: this.report.xp, ranked: this.report.ranked,
+    });
   }
 
   private handleUi(ui: ReturnType<InputManager['poll']>['ui']) {
     this.tabHeld = ui.scoreboard;
     if (ui.scoreboard) $('scoreTableInner').innerHTML = `<h2>Puntajes</h2>${this.statsTable()}`;
+    if (ui.chat >= 0 && this.state === 'playing' && this.world.cfg.mode === 'match') this.ui.chat.press(ui.chat);
+    this.ui.chat.tick();
     if (ui.ballCamToggle && this.state === 'playing') this.renderer.camCtl.ballCam = !this.renderer.camCtl.ballCam;
     if (ui.pause) {
       if (this.state === 'playing') { this.state = 'paused'; this.showOnly('pause'); }
@@ -432,6 +538,7 @@ class Game {
 
   // ---------- Menús ----------
   private showOnly(id: string | null) {
+    this.ui?.closeAll();
     for (const o of ['menu', 'setup', 'settings', 'controls', 'pause', 'end']) $(o).classList.toggle('hidden', o !== id);
   }
 
@@ -456,6 +563,10 @@ class Game {
         case 'resetSettings': this.settings = structuredClone(DEFAULTS); this.applySettings(); this.buildSliders(); break;
         case 'back': this.showOnly('menu'); break;
         case 'play': this.play(this.setupMode); break;
+        case 'garage': this.ui.open('garage'); break;
+        case 'ranked': this.ui.open('ranked'); break;
+        case 'profile': this.ui.open('profile'); break;
+        case 'remap': this.ui.open('remap'); break;
         case 'resume': this.state = 'playing'; this.showOnly(null); break;
         case 'restart': this.restart(); break;
         case 'quit': this.quit(); break;
@@ -476,10 +587,9 @@ class Game {
     CAR_BODIES.forEach((b, i) => {
       const el = document.createElement('button');
       el.innerHTML = `<b>${b.name}</b><small>${descr[i]}</small>`;
-      el.classList.toggle('on', i === this.settings.bodyIndex);
+      el.classList.toggle('on', i === getLoadout().body);
       el.addEventListener('click', () => {
-        this.settings.bodyIndex = i;
-        saveSettings(this.settings);
+        setLoadout({ body: i });
         bodies.querySelectorAll('button').forEach((x, j) => x.classList.toggle('on', j === i));
       });
       bodies.appendChild(el);

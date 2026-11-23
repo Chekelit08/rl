@@ -75,6 +75,8 @@ export class GameRenderer {
   quality: 'alta' | 'baja' = 'alta';
   /** Estelas y explosiones personalizadas (garage). */
   cosmetics: CosmeticsHooks | null = null;
+  /** Escena alternativa (garage): si existe, se dibuja en lugar del estadio. */
+  preview: { scene: THREE.Scene; camera: THREE.Camera; update(dt: number): void } | null = null;
 
   constructor(container: HTMLElement, camSettings: CameraSettings, theme: Theme = 'dia') {
     this.theme = theme;
@@ -364,6 +366,11 @@ export class GameRenderer {
   /** Dibuja un snapshot (ya interpolado). mode: 'play' sigue al auto local, 'replay' plano de transmisión, 'menu' órbita. */
   render(snap: Snapshot, dt: number, mode: 'play' | 'replay' | 'menu', look = { x: 0, y: 0 }, focusId = -1) {
     this.time += dt;
+    if (this.preview) {
+      this.preview.update(dt);
+      this.renderer.render(this.preview.scene, this.preview.camera);
+      return;
+    }
     const su = (this.sky?.material as THREE.ShaderMaterial | undefined)?.uniforms;
     if (su?.uTime) su.uTime.value = this.time;
     if (su?.time) su.time.value = this.time;
