@@ -246,13 +246,44 @@ export class Aerial extends Maneuver {
    * Modela el despegue rápido (salto + doble salto) y exige que la aceleración requerida sea alcanzable con turbo.
    */
   static feasible(car: Car, ballPos: V3, shotTarget: V3, T: number, boost: number, skill: number): boolean {
+    return Aerial.feasibleFrom(car.pos, car.vel, car.up(), car.forward(), ballPos, shotTarget, T, boost, skill);
+  }
+
+  /**
+   * Como `feasible`, pero permite conducir un rato hacia la pelota antes de despegar (el aéreo sale de un auto en
+   * movimiento). Devuelve el tiempo de conducción previo (s) o -1 si no es posible.
+   */
+  static feasibleWithDrive(car: Car, ballPos: V3, shotTarget: V3, T: number, boost: number, skill: number): number {
+    if (!car.onGround) return -1;
+    if (Aerial.feasible(car, ballPos, shotTarget, T, boost, skill)) return 0;
+    const to = flat(ballPos.sub(car.pos));
+    const d = to.len();
+    if (d < 1) return -1;
+    const dir = to.scale(1 / d);
+    const v0 = Math.max(0, car.vel.dot(dir));
+    const accel = boost > 40 ? 1250 : 800;
+    for (let tD = 0.3; tD <= T - 0.6; tD += 0.15) {
+      const vmax = 2250;
+      const tCap = Math.max(0, (vmax - v0) / accel);
+      const tt = Math.min(tD, tCap);
+      const dist = v0 * tt + 0.5 * accel * tt * tt + vmax * Math.max(0, tD - tCap);
+      if (dist > d - 400) break;
+      const v = Math.min(vmax, v0 + accel * tD);
+      const pos = new V3(car.pos.x + dir.x * dist, car.pos.y + dir.y * dist, car.pos.z);
+      const vel = new V3(dir.x * v, dir.y * v, 0);
+      const fwd = new V3(dir.x, dir.y, 0);
+      if (Aerial.feasibleFrom(pos, vel, new V3(0, 0, 1), fwd, ballPos, shotTarget, T - tD, boost - tD * CAR.BOOST_PER_SEC, skill)) return tD;
+    }
+    return -1;
+  }
+
+  static feasibleFrom(pos: V3, vel: V3, up: V3, fwd: V3, ballPos: V3, shotTarget: V3, T: number, boost: number, skill: number): boolean {
     const launchT = 0.3;
-    if (T < launchT + 0.25) return false;
-    const up = car.up();
+    if (T < launchT + 0.25 || boost < 8) return false;
     // Estado aproximado al final del despegue
     const vz = (CAR.JUMP_IMPULSE * 2 + CAR.JUMP_ACCEL * CAR.JUMP_MAX_TIME) + GRAVITY * launchT;
-    const v1 = car.vel.add(up.scale(vz));
-    const p1 = car.pos.add(car.vel.scale(launchT)).add(up.scale(100));
+    const v1 = vel.add(up.scale(vz));
+    const p1 = pos.add(vel.scale(launchT)).add(up.scale(100));
     const rem = T - launchT;
     const P = Aerial.contactPoint(ballPos, shotTarget);
     const a = P.sub(p1).sub(v1.scale(rem)).scale(2 / (rem * rem));
@@ -260,12 +291,10 @@ export class Aerial extends Maneuver {
     const mag = a.len();
     const maxA = CAR.BOOST_AIR * (0.62 + 0.25 * skill);
     if (mag > maxA) return false;
-    // Turbo necesario (fracción del tiempo con turbo ≈ mag / BOOST_AIR) + giro inicial
     const need = (rem * (mag / CAR.BOOST_AIR) + launchT) * CAR.BOOST_PER_SEC + 6;
     if (need > boost) return false;
-    // La dirección de aceleración no puede apuntar hacia abajo ni muy atrás del auto
     const dirH = flat(a).norm();
-    const fH = flat(car.forward()).norm();
+    const fH = flat(fwd).norm();
     if (a.z < 0) return false;
     return dirH.dot(fH) > -0.2 || flat(a).len() < 300;
   }

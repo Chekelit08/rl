@@ -27,6 +27,8 @@ export interface BotParams {
   aerialMinBoost: number;
   /** Precisión de la guía aérea (0..1). */
   aerialSkill: number;
+  /** Cuánto antes (s) tiene que llegar un aéreo respecto de un golpe de piso para preferirlo. */
+  aerialLead: number;
   /** Nivel de rotación: 0 = persigue la pelota, 1 = básica, 2 = completa (1.º/2.º/3.er hombre). */
   rotation: 0 | 1 | 2;
   /** Mecánicas avanzadas. */
@@ -62,6 +64,7 @@ export const PARAMS: Record<Difficulty, BotParams> = {
     aerialMax: 0,
     aerialMinBoost: 100,
     aerialSkill: 0,
+    aerialLead: 9,
     rotation: 0,
     speedFlip: false,
     waveDash: false,
@@ -89,6 +92,7 @@ export const PARAMS: Record<Difficulty, BotParams> = {
     aerialMax: 900,
     aerialMinBoost: 45,
     aerialSkill: 0.6,
+    aerialLead: 0.35,
     rotation: 1,
     speedFlip: false,
     waveDash: false,
@@ -116,6 +120,7 @@ export const PARAMS: Record<Difficulty, BotParams> = {
     aerialMax: 1800,
     aerialMinBoost: 30,
     aerialSkill: 1,
+    aerialLead: 0.15,
     rotation: 2,
     speedFlip: true,
     waveDash: true,

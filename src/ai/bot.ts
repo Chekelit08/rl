@@ -437,9 +437,10 @@ export class Bot {
     if (timeLeft < -0.12) { this.planTimer = 0; this.plan = null; this.executePosition(world, ctx, inp, this.posTarget); return; }
 
     if (plan.kind === 'aerial') {
-      // Despegar cuando estamos mirando hacia la pelota
+      // Conducir con turbo hacia la pelota y despegar cuando el aéreo ya es factible desde el estado actual
       const ang = localAngle(c, plan.ball);
-      if (Math.abs(ang) < 0.45 || flatDist(c.pos, plan.ball) < 600) {
+      const ready = c.onGround && Aerial.feasible(c, plan.ball, plan.target, timeLeft, c.boost, p.aerialSkill) && Math.abs(ang) < 0.5;
+      if (ready || (!c.onGround && timeLeft > 0.1)) {
         this.man = new Aerial(plan.tick, plan.target, world.tick);
         this.stats.aerials++;
         this.man.step(ctx, inp);
@@ -447,6 +448,7 @@ export class Bot {
       }
       steerTo(c, inp, plan.ball, p, false);
       inp.throttle = 1;
+      inp.boost = p.useBoost && Math.abs(ang) < 0.3 && c.boost > 10;
       return;
     }
 

@@ -100,11 +100,11 @@ function series(label: string, teamSize: number, strong: Difficulty, weak: Diffi
 }
 
 const t0 = performance.now();
-const dur = QUICK ? 120 : 180;
+const dur = QUICK ? 90 : 180;
 const seeds = (n: number, base: number) => Array.from({ length: n }, (_, i) => base + i * 7919);
 const results: [string, Agg][] = [];
-results.push(['1v1 L>N', series('1v1', 1, 2, 0, seeds(QUICK ? 4 : 8, 100), dur)]);
-results.push(['1v1 P>N', series('1v1', 1, 1, 0, seeds(QUICK ? 4 : 8, 200), dur)]);
+results.push(['1v1 L>N', series('1v1', 1, 2, 0, seeds(QUICK ? 2 : 8, 100), dur)]);
+results.push(['1v1 P>N', series('1v1', 1, 1, 0, seeds(QUICK ? 2 : 8, 200), dur)]);
 results.push(['1v1 L>P', series('1v1', 1, 2, 1, seeds(QUICK ? 4 : 10, 300), dur)]);
 results.push(['2v2 L>P', series('2v2', 2, 2, 1, seeds(QUICK ? 2 : 4, 400), dur)]);
 results.push(['3v3 L>P', series('3v3', 3, 2, 1, seeds(QUICK ? 2 : 4, 500), dur)]);

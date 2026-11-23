@@ -182,7 +182,7 @@ export function findShot(world: World, me: Car, pred: BallPredictor, p: BotParam
 
     if (kind === 'aerial') {
       if (aerialCandidate) continue;
-      if (me.onGround && Aerial.feasible(me, s.pos, opts.target, s.t, me.boost, p.aerialSkill)) {
+      if (me.onGround && Aerial.feasibleWithDrive(me, s.pos, opts.target, s.t, me.boost, p.aerialSkill) >= 0) {
         aerialCandidate = { kind, t: s.t, tick: tick0 + Math.round(s.t * 120), ball: s.pos.clone(), target: opts.target, contact: s.pos.clone(), dir, eta: s.t };
       }
       continue;
@@ -203,7 +203,7 @@ export function findShot(world: World, me: Car, pred: BallPredictor, p: BotParam
     if (eta + opts.margin <= s.t) {
       const plan: ShotPlan = { kind, t: s.t, tick: tick0 + Math.round(s.t * 120), ball: s.pos.clone(), target: opts.target, contact, dir, eta };
       // Si un aéreo llega bastante antes, preferirlo
-      if (aerialCandidate && aerialCandidate.t + 0.45 < plan.t) return aerialCandidate;
+      if (aerialCandidate && aerialCandidate.t + p.aerialLead < plan.t) return aerialCandidate;
       return plan;
     }
   }
