@@ -1,7 +1,7 @@
 // TURBOGOL — bucle principal: física fija a 120 Hz, render interpolado, repetición de gol, menús y HUD.
 
 import { BallPredictor, Bot, type Difficulty, DIFFICULTY_NAMES } from './ai/bot.ts';
-import { AudioEngine } from './audio/audio.ts';
+import { AudioEngine, DEFAULT_MIX, type MixSettings } from './audio/audio.ts';
 import { InputManager } from './input/input.ts';
 import { DEFAULT_CAMERA, type CameraSettings } from './render/camera.ts';
 import { GameRenderer } from './render/renderer.ts';
@@ -12,14 +12,14 @@ import { Quat } from './sim/math.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
 
 // ---------- Ajustes persistentes ----------
-interface Settings { camera: CameraSettings; volume: number; quality: 'alta' | 'baja'; replays: boolean; bodyIndex: number; theme: Theme }
-const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0, theme: 'dia' };
+interface Settings { camera: CameraSettings; volume: number; quality: 'alta' | 'baja'; replays: boolean; bodyIndex: number; theme: Theme; mix: MixSettings }
+const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0, theme: 'dia', mix: { ...DEFAULT_MIX } };
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem('turbogol.settings');
     if (raw) {
       const s = JSON.parse(raw);
-      return { ...DEFAULTS, ...s, camera: { ...DEFAULT_CAMERA, ...(s.camera ?? {}) } };
+      return { ...DEFAULTS, ...s, camera: { ...DEFAULT_CAMERA, ...(s.camera ?? {}) }, mix: { ...DEFAULT_MIX, ...(s.mix ?? {}) } };
     }
   } catch { /* almacenamiento no disponible */ }
   return structuredClone(DEFAULTS);
@@ -92,6 +92,7 @@ class Game {
     this.renderer.setQuality(this.settings.quality);
     this.input = new InputManager(app);
     this.audio.setVolume(this.settings.volume);
+    this.audio.setMix(this.settings.mix);
     // Mundo de fondo para el menú (bots jugando)
     this.startWorld({ mode: 'match', teamSize: 2, duration: 300, unlimitedBoost: false, seed: 7 }, 1, true);
     this.wireMenus();
@@ -283,22 +284,12 @@ class Game {
     const w = this.world;
     this.renderer.onEvent(ev, this.curSnap);
     if (this.state === 'menu') return;
-    const me = w.cars[0];
+    this.audio.onEvent(ev, this.curSnap, 0);
     switch (ev.type) {
-      case 'hit': {
-        const near = me ? me.pos.dist(ev.pos) < 1500 : true;
-        this.audio.hit(ev.strength, near);
-        break;
-      }
-      case 'bounce': this.audio.bounce(ev.strength); break;
-      case 'pad': if (ev.carId === 0) this.audio.pad(ev.big); break;
-      case 'jump': if (ev.carId === 0) this.audio.jump(); break;
-      case 'flip': if (ev.carId === 0) this.audio.jump(); break;
-      case 'flipreset': if (ev.carId === 0) { this.audio.pad(false); this.toast('¡Flip reset!'); } break;
-      case 'countdown': this.audio.countdown(false); this.setCenter(String(ev.n), 'pop'); break;
-      case 'kickoff': this.audio.countdown(true); this.setCenter('¡YA!', 'pop', 0.8); break;
+      case 'flipreset': if (ev.carId === 0) this.toast('¡Flip reset!'); break;
+      case 'countdown': this.setCenter(String(ev.n), 'pop'); break;
+      case 'kickoff': this.setCenter('¡YA!', 'pop', 0.8); break;
       case 'goal': {
-        this.audio.goal();
         const scorer = ev.scorerId >= 0 ? w.cars[ev.scorerId] : null;
         const own = scorer && scorer.team !== ev.team;
         this.setCenter('¡GOL!', 'pop goal' + ev.team, 2.8);
@@ -310,16 +301,13 @@ class Game {
         break;
       }
       case 'demo': {
-        this.audio.demo();
         const a = w.cars[ev.attacker], v = w.cars[ev.victim];
         this.feed(`💥 ${a.name} demolió a ${v.name}`, a.team);
         break;
       }
-      case 'bump': if (ev.attacker === 0 || ev.victim === 0) this.audio.bump(); break;
       case 'save': this.feed(`🧤 ¡Atajada de ${w.cars[ev.carId].name}!`, w.cars[ev.carId].team); break;
       case 'shot': if (w.cfg.mode === 'match') this.feed(`🎯 Tiro de ${w.cars[ev.carId].name}`, w.cars[ev.carId].team); break;
-      case 'overtime': this.setCenter('TIEMPO EXTRA', 'pop', 2.5); this.audio.whistle(); break;
-      case 'end': this.audio.whistle(); break;
+      case 'overtime': this.setCenter('TIEMPO EXTRA', 'pop', 2.5); break;
     }
   }
 
@@ -379,10 +367,8 @@ class Game {
       ($('boostRing') as unknown as SVGCircleElement).style.strokeDashoffset = String(314.16 * (1 - me.boost / 100));
       $('speedChip').textContent = `${Math.round(me.speed() * 0.036)} km/h${me.supersonic ? ' · SUPERSÓNICO' : ''}`;
       $('camChip').textContent = this.renderer.camCtl.ballCam ? 'CÁMARA: PELOTA' : 'CÁMARA: AUTO';
-      this.audio.updateCar(me.speed(), me.isBoosting, me.supersonic, me.onGround, this.state === 'playing');
-    } else {
-      this.audio.updateCar(0, false, false, true, false);
     }
+    this.audio.update(dt, this.curSnap, this.renderer.camera, this.state, this.state === 'menu' ? -1 : 0);
     $('scoreTable').classList.toggle('hidden', !(this.input && this.tabHeld && (this.state === 'playing' || this.state === 'paused')));
 
     if (this.state === 'ended') {
@@ -499,6 +485,7 @@ class Game {
     this.renderer.camCtl.updateFov(window.innerWidth / window.innerHeight);
     this.renderer.resize();
     this.audio.setVolume(this.settings.volume);
+    this.audio.setMix(this.settings.mix);
     if (this.renderer.quality !== this.settings.quality) this.renderer.setQuality(this.settings.quality);
     if (this.renderer.theme !== this.settings.theme) {
       this.renderer.setTheme(this.settings.theme);
@@ -522,6 +509,9 @@ class Game {
       ['Transición', 'transition', 1, 2, 0.1, () => cam.transition, (v) => (cam.transition = v), (v) => v.toFixed(1)],
       ['Sacudida', 'shake', 0, 1, 1, () => (cam.shake ? 1 : 0), (v) => (cam.shake = v === 1), (v) => (v ? 'Sí' : 'No')],
       ['Volumen', 'volume', 0, 1, 0.05, () => this.settings.volume, (v) => (this.settings.volume = v), (v) => `${Math.round(v * 100)}%`],
+      ...(['motor', 'efectos', 'publico', 'musica', 'ui'] as const).map((k): [string, string, number, number, number, () => number, (v: number) => void, (v: number) => string] =>
+        [{ motor: '· Motor', efectos: '· Efectos', publico: '· Público', musica: '· Música', ui: '· Interfaz' }[k], 'mix-' + k, 0, 1, 0.05, () => this.settings.mix[k], (v) => (this.settings.mix[k] = v), (v) => `${Math.round(v * 100)}%`]),
+      ['Vibración', 'haptics', 0, 1, 1, () => (this.settings.mix.haptics ? 1 : 0), (v) => (this.settings.mix.haptics = v === 1), (v) => (v ? 'Sí' : 'No')],
       ['Calidad', 'quality', 0, 1, 1, () => (this.settings.quality === 'alta' ? 1 : 0), (v) => (this.settings.quality = v ? 'alta' : 'baja'), (v) => (v ? 'Alta' : 'Baja')],
       ['Estadio', 'theme', 0, 1, 1, () => (this.settings.theme === 'dia' ? 0 : 1), (v) => (this.settings.theme = v ? 'noche' : 'dia'), (v) => (v ? 'Noche' : 'Día')],
       ['Repeticiones', 'replays', 0, 1, 1, () => (this.settings.replays ? 1 : 0), (v) => (this.settings.replays = v === 1), (v) => (v ? 'Sí' : 'No')],
