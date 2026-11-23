@@ -14,7 +14,8 @@
     "test:net": "node --experimental-strip-types --no-warnings tests/net.test.ts",
     "test": "npm run test:sim && npm run test:bots",
     "server": "node --experimental-strip-types --no-warnings server/main.ts",
-    "typecheck:server": "tsc --noEmit -p tsconfig.server.json"
+    "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
+    "test:net:e2e": "node --experimental-strip-types --no-warnings tests/net.e2e.ts"
   },
   "dependencies": {
     "three": "^0.187.0",
