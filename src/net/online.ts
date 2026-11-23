@@ -32,6 +32,7 @@ export interface OnlineHost {
 const LS_SERVER = 'turbogol.server';
 const LS_NAME = 'turbogol.name';
 const SS_TOKEN = 'turbogol.token';
+const SS_ROOM = 'turbogol.room'; // en una sala: al recargar la pestaña se vuelve solo (reconexión)
 
 const store = {
   get(k: string, session = false) { try { return (session ? sessionStorage : localStorage).getItem(k) ?? ''; } catch { return ''; } },
@@ -127,7 +128,7 @@ export class OnlineMode {
     this.host = host;
     this.pendingJoin = normalizeCode(new URLSearchParams(location.search).get('room') ?? '');
     this.injectSettingsRow();
-    if (this.pendingJoin.length === 5) setTimeout(() => this.open(), 0);
+    if (this.pendingJoin.length === 5 || store.get(SS_ROOM, true)) setTimeout(() => this.open(), 0);
   }
 
   // ---------- Conexión ----------
@@ -170,6 +171,7 @@ export class OnlineMode {
       case 'room': {
         const prev = this.room;
         this.room = m;
+        store.set(SS_ROOM, m.code, true);
         this.notePlayerChanges(m.players);
         if (m.state === 'lobby' && this.active) this.leaveMatchView();
         if (!this.active) this.screen = 'lobby';
@@ -178,10 +180,11 @@ export class OnlineMode {
       }
       case 'start': this.startMatch(m); break;
       case 'end': this.endInfo = { score: m.score, winner: m.winner, at: performance.now() }; break;
-      case 'left': this.room = null; this.screen = 'home'; break;
+      case 'left': this.room = null; store.set(SS_ROOM, '', true); this.screen = 'home'; break;
       case 'kicked':
         this.lastError = m.reason;
         this.room = null;
+        store.set(SS_ROOM, '', true);
         if (this.active) this.leaveMatchView();
         this.screen = 'home';
         break;
@@ -223,12 +226,13 @@ export class OnlineMode {
   setReady(ready: boolean) { this.send({ t: 'ready', ready }); }
   setConfig(cfg: Partial<RoomConfig>) { this.send({ t: 'config', cfg }); }
   start() { this.send({ t: 'start' }); }
-  leaveRoom() { this.send({ t: 'leave' }); this.room = null; this.screen = 'home'; this.render(); }
+  leaveRoom() { this.send({ t: 'leave' }); this.room = null; store.set(SS_ROOM, '', true); this.screen = 'home'; this.render(); }
   backToLobby() { this.send({ t: 'lobby' }); }
 
   /** Cierra el online y vuelve al menú principal. */
   exit() {
     if (this.room) this.net?.send({ t: 'leave' });
+    store.set(SS_ROOM, '', true);
     this.net?.close();
     this.net = null;
     this.room = null;
