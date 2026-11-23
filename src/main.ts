@@ -13,6 +13,7 @@ import { pointsFor } from './ui/points.ts';
 import { UiManager } from './ui/ui.ts';
 import { DEFAULT_CAMERA, type CameraSettings } from './render/camera.ts';
 import { GameRenderer } from './render/renderer.ts';
+import { preloadCarModels } from './render/carMesh.ts';
 import type { Theme } from './render/stadium.ts';
 import { OnlineMode } from './net/online.ts';
 import { emptyInput, type CarInput } from './sim/car.ts';
@@ -779,6 +780,9 @@ class Game {
   }
 }
 
-const game = new Game();
-// Gancho de depuración (pruebas automáticas y consola)
-(window as unknown as { __turbogol: Game }).__turbogol = game;
+// Las carrocerías se descargan antes de crear el primer auto (si alguna falla, ese auto usa la de respaldo)
+void preloadCarModels(CAR_BODIES.map((b) => b.id)).finally(() => {
+  const game = new Game();
+  // Gancho de depuración (pruebas automáticas y consola)
+  (window as unknown as { __turbogol: Game }).__turbogol = game;
+});

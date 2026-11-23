@@ -217,6 +217,49 @@ function surfacePatch(sf: Surface, x0: number, x1: number, t0: number, t1: numbe
   return g;
 }
 
+// ---------- Carrocerías modeladas en Blender (tools/autos/generar_autos.py → public/assets/models/*.glb) ----------
+/** Modelos cargados por id de carrocería. Si alguno falta, ese auto usa la carrocería procedural de respaldo. */
+const CAR_MODELS = new Map<string, { meshes: { geo: THREE.BufferGeometry; mat: string }[]; rear: THREE.Vector3 }>();
+
+/** Descarga las seis carrocerías. Se llama una vez al iniciar, antes de crear el primer auto. */
+export async function preloadCarModels(ids: string[]): Promise<void> {
+  const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+  const loader = new GLTFLoader();
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}assets/models/${id}.glb`);
+      const meshes: { geo: THREE.BufferGeometry; mat: string }[] = [];
+      const box = new THREE.Box3();
+      gltf.scene.updateMatrixWorld(true);
+      gltf.scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
+        meshes.push({ geo, mat: (m.material as THREE.Material).name });
+        geo.computeBoundingBox();
+        box.union(geo.boundingBox!);
+      });
+      // UV de calcomanías (misma convención que la carrocería procedural: ver garage/decals.ts)
+      const L = box.max.x - box.min.x, zc = (box.max.z + box.min.z) / 2;
+      let zs = 0, n = 0;
+      for (const { geo } of meshes) {
+        const pos = geo.getAttribute('position');
+        const uv = new Float32Array(pos.count * 2);
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          uv[i * 2] = (x / L + 0.55) / 1.1;
+          uv[i * 2 + 1] = (Math.atan2(y, -(z - zc)) / (Math.PI * 2) + 1) % 1;
+          if (x < box.min.x + 5) { zs += z; n++; }
+        }
+        geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      }
+      CAR_MODELS.set(id, { meshes, rear: new THREE.Vector3(box.min.x - 2.5, 0, n ? zs / n : zc) });
+    } catch (e) {
+      console.warn(`No se pudo cargar la carrocería "${id}"; se usa la de respaldo.`, e);
+    }
+  }));
+}
+
 export interface CarVisual {
   group: THREE.Group;
   frontWheels: THREE.Object3D[];
@@ -424,8 +467,24 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   chassis.position.set(ox, 0, oz);
   group.add(chassis);
 
-  // Pasarruedas recortados en la carrocería (coordenadas del chasis)
   const wheelY = (wd: { y: number }) => Math.max(wd.y, W * 0.5 * 0.9 - 7.5);
+  const rearK = sampleKeys(d.body, -0.5);
+  const lensMat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#e9f4ff', emissiveIntensity: 2.2, roughness: 0.1 });
+  const brake = new THREE.MeshBasicMaterial({ color: '#7a0a18' });
+  lensMat.side = THREE.DoubleSide;
+  brake.side = THREE.DoubleSide;
+  const model = CAR_MODELS.get(body.id);
+  if (model) {
+    // Carrocería modelada: una malla por material
+    const mats: Record<string, THREE.Material> = { paint: bodyMat, glass: glassMat, trim: trimMat, light_front: lensMat, light_rear: brake };
+    for (const part of model.meshes) {
+      const mesh = new THREE.Mesh(part.geo, mats[part.mat] ?? trimMat);
+      mesh.castShadow = true;
+      chassis.add(mesh);
+    }
+  }
+  if (!model) {
+  // Pasarruedas recortados en la carrocería (coordenadas del chasis)
   const arches: Arch[] = [body.frontWheel, body.backWheel].map((wd) => ({ x: wd.x - ox, z: -17 + wd.r - oz, r: wd.r + 3.4, yIn: wheelY(wd) - 10 }));
   const bodyOpts: LoftOpts = { botScale: 0.9, nTop: d.nTop ?? 2.5, tumble: d.tumble ?? 0.1, arches, flare: d.flare ?? 0.05, stations: 72, ring: 48 };
   const bodySurf = makeSurface(d.body, L, W, H, d.n, bodyOpts);
@@ -440,8 +499,6 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   const roof = new THREE.Mesh(loft(roofKeys, L, W, H, 3, { x0: d.roof[0], x1: d.roof[1], fixedBot: 0.3, stations: 14 }), bodyMat);
   roof.castShadow = true;
   chassis.add(roof);
-
-  const rearK = sampleKeys(d.body, -0.5);
 
   for (const sy of [-1, 1]) {
     // Espejos
@@ -476,11 +533,8 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
   chassis.add(splitter);
 
   // Faros: carcasa oscura + lente emisiva + luz diurna (DRL)
-  const lensMat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#e9f4ff', emissiveIntensity: 2.2, roughness: 0.1 });
   const drlMat = new THREE.MeshBasicMaterial({ color: '#dff0ff' });
-  const brake = new THREE.MeshBasicMaterial({ color: '#7a0a18' });
   const lightMatSide = { side: THREE.DoubleSide };
-  lensMat.side = THREE.DoubleSide;
   const xMax = d.body[d.body.length - 1][0], xMin = d.body[0][0];
   const lg = d.lights ?? { t0: 0.17, t1: 0.3, len: 0.085 };
   const housingMat = new THREE.MeshPhysicalMaterial({ color: '#0a0b0e', metalness: 0.4, roughness: 0.2, clearcoat: 1, ...lightMatSide });
@@ -531,6 +585,8 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
     chassis.add(fin);
   }
 
+  } // fin de la carrocería procedural de respaldo
+
   // Ruedas (con la cara externa al ras de la carrocería) y pasarruedas oscuros
   const wheels: THREE.Object3D[] = [];
   const frontWheels: THREE.Object3D[] = [];
@@ -546,14 +602,16 @@ export function buildCar(body: CarBody, team: number, lookIn?: CarLook): CarVisu
       // Medio cilindro abierto (arco superior) alrededor del eje de la rueda
       const arch = new THREE.Mesh(new THREE.CylinderGeometry(wd.r + 2.6, wd.r + 2.6, 9, 20, 1, true, -Math.PI / 2, Math.PI), archMat);
       arch.position.set(wd.x, sy * (y - 3), -17 + wd.r);
-      group.add(arch);
+      if (!model) group.add(arch);
     }
   }
 
   // Llama del turbo (los colores dependen de la estela elegida; ver garage/fxRender)
   const flame = new THREE.Group();
   // Tobera del turbo: asoma por detrás de la cola (la carrocería ahora es cerrada)
-  const rear = new THREE.Vector3(ox + (d.body[0][0] - 0.014) * L - 1.5, 0, oz + ((rearK[1] + rearK[2]) / 2 - 0.04) * H);
+  const rear = model
+    ? new THREE.Vector3(ox + model.rear.x, 0, oz + model.rear.z)
+    : new THREE.Vector3(ox + (d.body[0][0] - 0.014) * L - 1.5, 0, oz + ((rearK[1] + rearK[2]) / 2 - 0.04) * H);
   flame.position.copy(rear);
   const flameMats: THREE.MeshBasicMaterial[] = [];
   const mkCone = (r: number, len: number, col: string | THREE.Color, op: number, x: number) => {

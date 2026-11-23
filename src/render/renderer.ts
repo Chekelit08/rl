@@ -184,9 +184,9 @@ export class GameRenderer {
     this.stadium = new Stadium(theme);
     g.add(this.stadium.group);
     if (this.bloom) {
-      this.bloom.strength = day ? 0.32 : 0.5;
-      this.bloom.radius = day ? 0.4 : 0.5;
-      this.bloom.threshold = day ? 1.35 : 0.85;
+      this.bloom.strength = day ? 0.32 : 0.32;
+      this.bloom.radius = day ? 0.4 : 0.45;
+      this.bloom.threshold = day ? 1.35 : 1.05;
     }
     this.stadium.setSun(this.sunDir);
     this.applyStadiumQuality();
@@ -322,7 +322,7 @@ export class GameRenderer {
     }
     const day = this.theme === 'dia';
     if (p.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), day ? 0.32 : 0.5, day ? 0.4 : 0.5, day ? 1.35 : 0.85);
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), day ? 0.32 : 0.32, day ? 0.4 : 0.45, day ? 1.35 : 1.05);
       this.composer.addPass(this.bloom);
     }
     this.composer.addPass(new ShaderPass(GradeShader));
