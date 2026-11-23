@@ -9,6 +9,7 @@ import type { Theme } from './render/stadium.ts';
 import { emptyInput, type CarInput } from './sim/car.ts';
 import { CAR_BODIES, DT, TEAM_NAMES } from './sim/constants.ts';
 import { Quat } from './sim/math.ts';
+import { Extras } from './training/extras.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
 
 // ---------- Ajustes persistentes ----------
@@ -57,7 +58,7 @@ function lerpSnap(a: Snapshot, b: Snapshot, t: number): Snapshot {
   };
 }
 
-type State = 'menu' | 'playing' | 'paused' | 'replay' | 'ended';
+type State = 'menu' | 'playing' | 'paused' | 'replay' | 'ended' | 'ext';
 
 class Game {
   settings = loadSettings();
@@ -68,8 +69,8 @@ class Game {
   bots = new Map<number, Bot>();
   predictor = new BallPredictor();
   state: State = 'menu';
-  private prevSnap!: Snapshot;
-  private curSnap!: Snapshot;
+  prevSnap!: Snapshot;
+  curSnap!: Snapshot;
   private acc = 0;
   private last = performance.now();
   private history: Snapshot[] = [];
@@ -85,6 +86,8 @@ class Game {
   private setupMode: 'match' | 'freeplay' = 'match';
   private setupValues = { teamSize: 1, difficulty: 1, duration: 300, unlimited: 0 };
   private returnTo: 'menu' | 'pause' = 'menu';
+  /** Entrenamiento, juego libre extendido, repeticiones y clips (src/training, src/replay). */
+  ext: Extras;
 
   constructor() {
     const app = $('app');
@@ -92,6 +95,7 @@ class Game {
     this.renderer.setQuality(this.settings.quality);
     this.input = new InputManager(app);
     this.audio.setVolume(this.settings.volume);
+    this.ext = new Extras(this as unknown as ConstructorParameters<typeof Extras>[0]);
     // Mundo de fondo para el menú (bots jugando)
     this.startWorld({ mode: 'match', teamSize: 2, duration: 300, unlimitedBoost: false, seed: 7 }, 1, true);
     this.wireMenus();
@@ -122,6 +126,7 @@ class Game {
     }
     this.world.setupKickoff();
     if (cfg.mode === 'freeplay') this.world.resetFreeplay(this.world.cars[0]);
+    this.ext.onWorldStart(cfg, attract);
     this.renderer.setupCars(this.world.cars.map((c) => ({ id: c.id, team: c.team, bodyIndex: CAR_BODIES.indexOf(c.body), name: c.name })), attract ? -1 : 0);
     this.renderer.camCtl.snapTo();
     this.curSnap = this.world.snapshot();
@@ -158,6 +163,7 @@ class Game {
   }
 
   restart() {
+    if (this.ext.restart()) return;
     if (!this.lastCfg) return;
     this.startWorld({ ...this.lastCfg, seed: Math.floor(Math.random() * 1e9) }, this.lastDifficulty);
     this.showOnly(null);
@@ -181,7 +187,9 @@ class Game {
     this.look = { x: ui.lookX, y: ui.lookY };
     this.handleUi(ui);
 
-    if (this.state === 'replay' && this.replay) {
+    if (this.state === 'ext') {
+      this.ext.frame(dt);
+    } else if (this.state === 'replay' && this.replay) {
       this.stepReplay(dt, ui.skip);
     } else if (this.state === 'playing' || this.state === 'menu' || this.state === 'ended') {
       this.acc += dt;
@@ -199,7 +207,7 @@ class Game {
       this.renderer.render(this.curSnap, 0, 'play', this.look);
     }
 
-    this.updateHud(dt);
+    if (this.state !== 'ext') this.updateHud(dt);
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -211,12 +219,14 @@ class Game {
       if (bot) return bot.think(w, this.predictor, DT);
       return this.state === 'playing' ? this.playerInput : emptyInput();
     });
+    if (this.ext.beforeStep(inputs)) { this.prevSnap = this.curSnap; this.curSnap = w.snapshot(); return; }
     w.step(inputs);
     this.prevSnap = this.curSnap;
     this.curSnap = w.snapshot();
     this.history.push(this.curSnap);
     if (this.history.length > 120 * 9) this.history.shift();
     for (const ev of w.takeEvents()) this.onEvent(ev);
+    this.ext.afterStep(this.curSnap);
 
     // Transiciones del partido
     if (w.cfg.mode === 'match' && w.phase === 'goal' && w.phaseTimer <= 0) {
@@ -252,7 +262,7 @@ class Game {
     const end = Math.min(this.history.length, idx + 60);
     this.replay = { frames: this.history.slice(start, end), t: 0, goalIndex: idx - start, focusId: this.world.lastGoal!.scorerId };
     this.state = 'replay';
-    this.renderer.camCtl.snapTo();
+    this.renderer.camCtl.resetDirector();
     $('replayBadge').classList.remove('hidden');
     this.setCenter('');
   }
@@ -282,6 +292,7 @@ class Game {
   private onEvent(ev: GameEvent) {
     const w = this.world;
     this.renderer.onEvent(ev, this.curSnap);
+    this.ext.onEvent(ev);
     if (this.state === 'menu') return;
     const me = w.cars[0];
     switch (ev.type) {
@@ -410,6 +421,7 @@ class Game {
   }
 
   private handleUi(ui: ReturnType<InputManager['poll']>['ui']) {
+    this.ext.handleUi(ui);
     this.tabHeld = ui.scoreboard;
     if (ui.scoreboard) $('scoreTableInner').innerHTML = `<h2>Puntajes</h2>${this.statsTable()}`;
     if (ui.ballCamToggle && this.state === 'playing') this.renderer.camCtl.ballCam = !this.renderer.camCtl.ballCam;
@@ -427,7 +439,6 @@ class Game {
       this.world.resetFreeplay(this.world.cars[0]);
       this.renderer.camCtl.snapTo();
     }
-    if (ui.saveClip && this.state === 'playing') this.toast('Guardar clips llega en la fase 2 (ya se graban los últimos 9 s)');
   }
 
   // ---------- Menús ----------
@@ -459,6 +470,7 @@ class Game {
         case 'resume': this.state = 'playing'; this.showOnly(null); break;
         case 'restart': this.restart(); break;
         case 'quit': this.quit(); break;
+        default: this.ext.action(act); break;
       }
     });
     // Segmentos

@@ -92,6 +92,8 @@ export class TrainingSession {
   resultTimer = 0;
   lastResult: ShotResult = 'pendiente';
   attempts = 0;
+  /** Aumenta cada vez que se carga un tiro (la interfaz lo usa para cortar la cámara y vaciar el rebobinado). */
+  loads = 0;
   private current: Shot;
   private touchedTick = -1;
   private releaseTick = 0;
@@ -117,6 +119,7 @@ export class TrainingSession {
   get timeLimit() { return this.current.time ?? DEFAULT_TIME[this.pack.category]; }
 
   load(i: number) {
+    this.loads++;
     this.index = Math.max(0, Math.min(this.pack.shots.length - 1, i));
     const base = this.pack.shots[this.index];
     this.current = this.opts.variance ? varyShot(base, this.rand) : base;
@@ -160,8 +163,10 @@ export class TrainingSession {
       this.resultTimer -= dt;
       if (this.resultTimer <= 0) {
         if (this.lastResult === 'acierto' && this.opts.autoAdvance) {
-          if (this.results.every((r) => r !== 'pendiente') && this.index === this.total - 1) this.phase = 'terminado';
-          else this.next();
+          // Avanza en orden; al final, vuelve al primer tiro sin intentar o termina el pack
+          const next = this.index + 1 < this.total ? this.index + 1 : this.results.indexOf('pendiente');
+          if (next < 0) this.phase = 'terminado';
+          else this.load(next);
         } else this.retry();
       }
       return;
