@@ -2,7 +2,9 @@
 
 import * as THREE from 'three';
 import { arenaDistance, arenaNormal } from '../sim/arena.ts';
-import type { BallSnap, CarSnap } from '../sim/world.ts';
+import type { BallSnap, CarSnap, Snapshot } from '../sim/world.ts';
+
+export type DirectorShot = 'chase' | 'wide' | 'goal' | 'low';
 
 export interface CameraSettings {
   fov: number; // horizontal
@@ -105,8 +107,12 @@ export class CameraController {
     this.cam.lookAt(this.cam.position.clone().add(this.look));
   }
 
-  /** Cámara de repetición: plano de transmisión siguiendo la pelota. */
-  replay(ball: BallSnap, focus: CarSnap | null, dt: number) {
+  /**
+   * Cámara de repetición. Con el snapshot completo usa el director de transmisión (planos y cortes);
+   * sin él, sigue la pelota desde atrás.
+   */
+  replay(ball: BallSnap, focus: CarSnap | null, dt: number, snap?: Snapshot) {
+    if (snap) { this.director(snap, dt, focus ? focus.id : -1); return; }
     const bp = new THREE.Vector3(ball.x, ball.y, ball.z);
     const vel = new THREE.Vector3(ball.vx, ball.vy, 0);
     let dir = vel.lengthSq() > 200 * 200 ? vel.normalize() : new THREE.Vector3(0, Math.sign(ball.y) || 1, 0);
@@ -124,6 +130,150 @@ export class CameraController {
     this.applyShake(dt);
     this.cam.lookAt(this.cam.position.clone().add(this.look));
   }
+
+  // ---------- Modo personalizado (entrenamiento, editor, visor de repeticiones) ----------
+
+  /** Función de cámara externa; si es null, `custom` usa el director. */
+  customFn: ((snap: Snapshot, dt: number, cc: CameraController) => void) | null = null;
+
+  /** El renderer llama a esto en el modo 'custom'. */
+  custom(snap: Snapshot, dt: number) {
+    if (this.customFn) this.customFn(snap, dt, this);
+    else this.director(snap, dt);
+  }
+
+  // ---------- Cámara libre ----------
+  readonly free = { pos: new THREE.Vector3(0, -4200, 1100), yaw: Math.PI / 2, pitch: -0.28 };
+
+  freeForward() {
+    const f = this.free;
+    return new THREE.Vector3(Math.cos(f.yaw) * Math.cos(f.pitch), Math.sin(f.yaw) * Math.cos(f.pitch), Math.sin(f.pitch));
+  }
+
+  /** Mueve la cámara libre: adelante/derecha/arriba en uu (relativo a hacia dónde mira). */
+  freeMove(forward: number, right: number, up: number) {
+    const f = this.free;
+    const rt = new THREE.Vector3(Math.sin(f.yaw), -Math.cos(f.yaw), 0);
+    f.pos.addScaledVector(this.freeForward(), forward).addScaledVector(rt, right).add(new THREE.Vector3(0, 0, up));
+    f.pos.x = Math.max(-9000, Math.min(9000, f.pos.x));
+    f.pos.y = Math.max(-11000, Math.min(11000, f.pos.y));
+    f.pos.z = Math.max(20, Math.min(6000, f.pos.z));
+  }
+
+  freeRotate(dYaw: number, dPitch: number) {
+    const f = this.free;
+    f.yaw = wrap(f.yaw + dYaw);
+    f.pitch = Math.max(-1.5, Math.min(1.5, f.pitch + dPitch));
+  }
+
+  /** Ubica la cámara libre mirando a un punto. */
+  freeLookAt(from: THREE.Vector3, target: THREE.Vector3) {
+    const f = this.free;
+    f.pos.copy(from);
+    const d = target.clone().sub(from);
+    f.yaw = Math.atan2(d.y, d.x);
+    f.pitch = Math.atan2(d.z, Math.hypot(d.x, d.y));
+  }
+
+  applyFree(dt = 0) {
+    this.pos.copy(this.free.pos);
+    this.look.copy(this.freeForward());
+    this.applyShake(dt);
+    this.cam.lookAt(this.cam.position.clone().add(this.look));
+    this.initialized = false;
+  }
+
+  // ---------- Director de transmisión ----------
+  private shot: DirectorShot = 'chase';
+  private shotTime = 0;
+  private wideSide = -1;
+  /** Auto preferido por el director (-1 = automático: el más cercano a la pelota). */
+  directorFocus = -1;
+  get currentShot() { return this.shot; }
+
+  /**
+   * Director automático: plano de persecución detrás del protagonista, plano general desde la tribuna
+   * cuando la pelota vuela alto o la jugada se estira, y cámara detrás del arco cuando la pelota llega al área.
+   */
+  director(snap: Snapshot, dt: number, preferId = this.directorFocus) {
+    const b = snap.ball;
+    const bp = new THREE.Vector3(b.x, b.y, b.z);
+    const side = Math.sign(b.y) || 1;
+    const toLine = 5120 - Math.abs(b.y);
+    const vToward = b.vy * side;
+    const speed = Math.hypot(b.vx, b.vy, b.vz);
+
+    // Protagonista: el preferido si está vivo; si no, el más cercano a la pelota
+    let focus = snap.cars.find((c) => c.id === preferId && !c.demoed) ?? null;
+    if (!focus) {
+      let best = Infinity;
+      for (const c of snap.cars) {
+        if (c.demoed) continue;
+        const d = Math.hypot(c.x - b.x, c.y - b.y, c.z - b.z);
+        if (d < best) { best = d; focus = c; }
+      }
+    }
+
+    let want: DirectorShot = 'chase';
+    if (!b.hidden && toLine < 2300 && (vToward > 250 || toLine < 900)) want = 'goal';
+    else if (b.z > 900 || (this.shot === 'chase' && this.shotTime > 7) || (this.shot === 'wide' && this.shotTime < 3.5)) want = 'wide';
+    if (b.hidden) want = this.shot === 'goal' ? 'goal' : 'wide';
+    if (speed > 3800 && want === 'chase') want = 'low';
+
+    this.shotTime += dt;
+    let cut = false;
+    if (want !== this.shot && (this.shotTime > 1.6 || want === 'goal')) {
+      if (want === 'wide') this.wideSide = (focus ? Math.sign(focus.x) : 1) >= 0 ? -1 : 1;
+      this.shot = want;
+      this.shotTime = 0;
+      cut = true;
+    }
+
+    const desired = new THREE.Vector3();
+    const target = bp.clone();
+    let rate = 4;
+    switch (this.shot) {
+      case 'chase':
+      case 'low': {
+        const low = this.shot === 'low';
+        if (focus) {
+          const fp = new THREE.Vector3(focus.x, focus.y, focus.z);
+          const dir = bp.clone().sub(fp); dir.z = 0;
+          if (dir.lengthSq() < 1) dir.set(0, side, 0);
+          dir.normalize();
+          desired.copy(fp).addScaledVector(dir, low ? -420 : -720).add(new THREE.Vector3(0, 0, low ? 90 : 270));
+          target.lerp(fp, low ? 0.15 : 0.3);
+        } else {
+          desired.copy(bp).add(new THREE.Vector3(0, -side * 1200, 500));
+        }
+        rate = low ? 6 : 3.5;
+        break;
+      }
+      case 'wide': {
+        desired.set(this.wideSide * 5600, Math.max(-5400, Math.min(5400, b.y * 0.85)), 2100);
+        rate = 2.2;
+        break;
+      }
+      case 'goal': {
+        desired.set(b.x * 0.3, side * 6650, 1150);
+        rate = 2.5;
+        break;
+      }
+    }
+    // Las cámaras de persecución no salen de la arena (las de tribuna y arco sí: miran a través del vidrio y la red)
+    if (this.shot === 'chase' || this.shot === 'low') {
+      const d = arenaDistance(desired.x, desired.y, desired.z);
+      if (d < 70) { const n = arenaNormal(desired.x, desired.y, desired.z); desired.add(new THREE.Vector3(n.x, n.y, n.z).multiplyScalar(70 - d)); }
+    }
+    if (cut || !this.initialized) { this.pos.copy(desired); this.initialized = true; this.look.copy(target.clone().sub(this.pos).normalize()); }
+    else this.pos.lerp(desired, 1 - Math.exp(-rate * dt));
+    this.look.lerp(target.sub(this.pos).normalize(), 1 - Math.exp(-dt * 7)).normalize();
+    this.applyShake(dt);
+    this.cam.lookAt(this.cam.position.clone().add(this.look));
+  }
+
+  /** Reinicia el director (al empezar una repetición). */
+  resetDirector() { this.shot = 'chase'; this.shotTime = 0; this.initialized = false; }
 
   /** Cámara de menú: órbita lenta sobre la cancha. */
   orbit(t: number) {
