@@ -274,9 +274,9 @@ export class Crowd {
     this.missArmed = 0;
     // Explosión inicial del público
     this.roar.gain.cancelScheduledValues(t);
-    this.roar.gain.setTargetAtTime(0.85, t, 0.08);
+    this.roar.gain.setTargetAtTime(1.1, t, 0.06);
     this.roarFilter.frequency.setTargetAtTime(2600, t, 0.1);
-    this.voices(t + 0.05, 'a', 3.2, 0.22, 175, 1.05, 12);
+    this.voices(t + 0.05, 'a', 3.2, 0.34, 175, 1.05, 14);
     this.whistles(t + 0.4, 14);
     this.applause(t + 1.2, 6, 0.32);
     this.pendingChant = forLocalTeam ? 6 : 8;
@@ -286,7 +286,7 @@ export class Crowd {
     if (this.oohCooldown > 0) return;
     this.oohCooldown = 4;
     const t = this.c.now();
-    this.voices(t, 'u', 1.8, 0.2, 150, 0.82, 12);
+    this.voices(t, 'u', 1.8, 0.13, 150, 0.82, 10);
     this.roar.gain.setTargetAtTime(0.25, t, 0.1);
   }
 

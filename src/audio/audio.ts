@@ -20,7 +20,7 @@ export interface MixSettings {
   haptics: boolean;
 }
 
-export const DEFAULT_MIX: MixSettings = { motor: 0.8, efectos: 0.9, publico: 0.8, musica: 0.6, ui: 0.7, haptics: true };
+export const DEFAULT_MIX: MixSettings = { motor: 0.8, efectos: 0.9, publico: 0.55, musica: 0.6, ui: 0.7, haptics: true };
 
 export type AudioState = 'menu' | 'playing' | 'paused' | 'replay' | 'ended';
 
@@ -131,6 +131,7 @@ export class AudioEngine {
         sfx.net(c, ev.pos, ev.speed);
         sfx.horn(c);
         this.crowd.noteGoal();
+        this.duck(0.45, 3);
         this.crowd.goal(ours);
         if (me) this.haptics.goal(ours);
         break;
@@ -161,6 +162,16 @@ export class AudioEngine {
         this.crowd.finalApplause();
         break;
     }
+  }
+
+  /** Baja el bus del motor un momento para que el público y la bocina del gol se luzcan. */
+  private duck(amount: number, secs: number) {
+    const c = this.core;
+    if (!c) return;
+    const g = c.buses.motor.gain, t = c.now(), base = this.mix.motor;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(base * amount, t, 0.08);
+    g.setTargetAtTime(base, t + secs, 0.6);
   }
 
   // ---------- Estado por cuadro ----------
