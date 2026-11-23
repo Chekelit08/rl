@@ -355,7 +355,7 @@ export class GameRenderer {
   }
 
   /** Dibuja un snapshot (ya interpolado). mode: 'play' sigue al auto local, 'replay' plano de transmisión, 'menu' órbita. */
-  render(snap: Snapshot, dt: number, mode: 'play' | 'replay' | 'menu', look = { x: 0, y: 0 }, focusId = -1) {
+  render(snap: Snapshot, dt: number, mode: 'play' | 'replay' | 'menu' | 'custom', look = { x: 0, y: 0 }, focusId = -1) {
     this.time += dt;
     const su = (this.sky?.material as THREE.ShaderMaterial | undefined)?.uniforms;
     if (su?.uTime) su.uTime.value = this.time;
@@ -485,9 +485,11 @@ export class GameRenderer {
     // Cámara
     if (mode === 'menu') {
       this.camCtl.orbit(this.time);
+    } else if (mode === 'custom') {
+      this.camCtl.custom(snap, dt);
     } else if (mode === 'replay') {
       const focus = snap.cars.find((c) => c.id === focusId) ?? null;
-      this.camCtl.replay(b, focus, dt);
+      this.camCtl.replay(b, focus, dt, snap);
     } else {
       const me = snap.cars.find((c) => c.id === this.localId);
       if (me && !me.demoed) this.camCtl.follow(me, b, dt, look.x, look.y);
