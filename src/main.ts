@@ -14,6 +14,7 @@ import { UiManager } from './ui/ui.ts';
 import { DEFAULT_CAMERA, type CameraSettings } from './render/camera.ts';
 import { GameRenderer } from './render/renderer.ts';
 import type { Theme } from './render/stadium.ts';
+import { OnlineMode } from './net/online.ts';
 import { emptyInput, type CarInput } from './sim/car.ts';
 import { CAR_BODIES, DT, TEAM_NAMES } from './sim/constants.ts';
 import { Quat } from './sim/math.ts';
@@ -76,6 +77,7 @@ class Game {
   world!: World;
   bots = new Map<number, Bot>();
   predictor = new BallPredictor();
+  online: OnlineMode;
   state: State = 'menu';
   prevSnap!: Snapshot;
   curSnap!: Snapshot;
@@ -123,6 +125,10 @@ class Game {
       renderer: this.renderer,
       chatCars: () => this.world.cars.map((c) => ({ id: c.id, team: c.team, name: c.name, isBot: c.isBot })),
     }, $('hud'));
+    this.online = new OnlineMode({
+      renderer: this.renderer, audio: this.audio, bodyIndex: () => getLoadout().body,
+      showOnly: (id) => this.showOnly(id), toMenu: () => this.quit(),
+    });
     $('loading').classList.add('hidden');
     requestAnimationFrame((t) => this.frame(t));
   }
@@ -246,6 +252,7 @@ class Game {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const { car, ui } = this.input.poll();
+    if (this.online.active) { this.online.frame(dt, car, ui); requestAnimationFrame((t) => this.frame(t)); return; }
     this.playerInput = car;
     this.look = { x: ui.lookX, y: ui.lookY };
     this.handleUi(ui);
@@ -559,6 +566,7 @@ class Game {
       switch (act) {
         case 'match': this.openSetup('match'); break;
         case 'freeplay': this.openSetup('freeplay'); break;
+        case 'online': this.online.open(); break;
         case 'settings': this.returnTo = this.state === 'paused' ? 'pause' : 'menu'; this.buildSliders(); this.showOnly('settings'); break;
         case 'controls': this.returnTo = this.state === 'paused' ? 'pause' : 'menu'; this.showOnly('controls'); break;
         case 'closeControls': case 'closeSettings': this.back(); break;

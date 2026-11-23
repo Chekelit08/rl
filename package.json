@@ -13,13 +13,20 @@
     "test:bots": "node --experimental-strip-types tests/bots.test.ts",
     "test:audio": "node tests/audio.test.cjs",
     "test:training": "node --experimental-strip-types tests/training.test.ts",
-    "test": "npm run test:sim && npm run test:bots"
+    "test:net": "node --experimental-strip-types --no-warnings tests/net.test.ts",
+    "test:net:e2e": "node --experimental-strip-types --no-warnings tests/net.e2e.ts",
+    "test": "npm run test:sim && npm run test:bots && npm run test:training && npm run test:net",
+    "server": "node --experimental-strip-types --no-warnings server/main.ts",
+    "typecheck:server": "tsc --noEmit -p tsconfig.server.json"
   },
   "dependencies": {
-    "three": "^0.187.0"
+    "three": "^0.187.0",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/three": "^0.187.0",
+    "@types/ws": "^8.18.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
   }

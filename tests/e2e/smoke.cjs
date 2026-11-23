@@ -12,7 +12,10 @@ const OUT = process.argv[3] || '';
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(`[console.error] ${m.text().slice(0, 300)}`); });
+  page.on('console', (m) => {
+    // Sin servidor de juego levantado, la pantalla Online intenta conectar: eso no es un error del cliente
+    if (m.type() === 'error' && !/WebSocket connection to .* failed/.test(m.text())) errors.push(`[console.error] ${m.text().slice(0, 300)}`);
+  });
   // Calidad baja para que el render por software sea tolerable
   await page.addInitScript(() => {
     try {

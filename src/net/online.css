@@ -1,0 +1,65 @@
+/* Modo online: menú, lobby, resultado e indicador de red. Reusa .overlay, .panel, .row, .seg, .btn de style.css. */
+
+.online { z-index: 12; }
+.online.in-match { background: rgba(2, 6, 13, .45); }
+.online h3 { font-family: var(--display); font-size: 17px; letter-spacing: 1px; margin: 0 0 12px; color: var(--ink); }
+.online .row { grid-template-columns: 170px 1fr; }
+.online input[type=text], .online-server input[type=text] {
+  pointer-events: auto; font-family: var(--text); font-weight: 700; font-size: 17px; color: var(--ink);
+  background: rgba(20, 32, 56, .9); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-width: 0; width: 100%;
+  box-sizing: border-box; outline: none;
+}
+.online input[type=text]:focus, .online-server input[type=text]:focus { border-color: var(--blue); }
+.online .seg button:disabled { opacity: .55; cursor: default; }
+.online .btn:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; filter: grayscale(.4); }
+.on-box { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 6px; margin: 14px 0; background: rgba(255, 255, 255, .02); }
+.on-box .actions { margin: 0 0 10px; }
+.on-join { display: flex; gap: 10px; margin-bottom: 12px; }
+.on-join input { font-family: var(--display) !important; letter-spacing: 6px; text-transform: uppercase; font-size: 22px !important; text-align: center; }
+.on-join .btn { flex: none; text-align: center; }
+.on-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 700; font-size: 15px; margin: -6px 0 12px; flex-wrap: wrap; }
+.on-status i, .net-chip i { width: 9px; height: 9px; border-radius: 50%; background: #ffc23d; display: inline-block; flex: none; }
+.on-status.open i { background: #3ddc84; }
+.on-status.closed i { background: var(--red); }
+.on-help { background: rgba(255, 194, 61, 0.08); border: 1px solid rgba(255, 194, 61, 0.3); border-radius: 8px; padding: 8px 12px; margin: -4px 0 12px; font-size: 14px; line-height: 1.4; color: var(--ink); }
+.on-help code { background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 4px; }
+.on-status .url { font-weight: 600; opacity: .7; font-size: 13px; word-break: break-all; }
+.linkbtn { pointer-events: auto; background: none; border: 0; color: var(--blue); font-family: var(--text); font-weight: 700; font-size: 15px; cursor: pointer; padding: 2px 6px; text-decoration: underline; text-underline-offset: 3px; }
+.linkbtn:hover { color: #7cb6ff; }
+.on-error { background: rgba(255, 51, 85, .14); border: 1px solid rgba(255, 51, 85, .45); color: #ffd0d8; border-radius: 8px; padding: 8px 12px; font-weight: 700; margin-top: 10px; }
+.on-note { color: var(--muted); font-weight: 600; margin: 0 0 14px; }
+.on-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.on-head .code { font-family: var(--display); letter-spacing: 6px; color: var(--boost); margin-left: 6px; }
+.on-share { display: flex; align-items: center; gap: 6px; color: #3ddc84; font-weight: 700; }
+.on-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.on-team { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, .02); }
+.on-team .th { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-family: var(--display); letter-spacing: 2px; font-size: 16px; }
+.on-team.t0 .th { background: linear-gradient(90deg, rgba(46, 139, 255, .35), transparent); border-left: 4px solid var(--blue); }
+.on-team.t1 .th { background: linear-gradient(90deg, rgba(255, 51, 85, .35), transparent); border-left: 4px solid var(--red); }
+.on-team ul { list-style: none; margin: 0; padding: 4px 0; }
+.on-team li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; font-weight: 700; font-size: 17px; border-top: 1px solid rgba(140, 180, 255, .06); }
+.on-team li:first-child { border-top: 0; }
+.on-team li.me { background: rgba(255, 255, 255, .05); }
+.on-team li.me .nm::after { content: ' (vos)'; color: var(--muted); font-weight: 600; }
+.on-team li.off { opacity: .55; }
+.on-team li.empty { color: var(--muted); font-weight: 600; font-style: italic; }
+.on-team .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.on-team .nm b { color: var(--boost); }
+.on-team .st { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+.on-team .st.ok { color: #3ddc84; }
+.on-cfg { border-top: 1px solid var(--line); padding-top: 14px; }
+
+/* Indicador de ping y pérdida (HUD) */
+.net-chip { position: absolute; top: 16px; left: 18px; display: flex; align-items: center; gap: 7px; background: var(--panel); border: 1px solid var(--line);
+  padding: 5px 11px; border-radius: 6px; font-weight: 700; font-size: 14px; letter-spacing: .5px; }
+.net-chip span { color: var(--muted); }
+.net-chip.good i { background: #3ddc84; }
+.net-chip.mid i { background: #ffc23d; }
+.net-chip.bad i { background: var(--red); }
+
+.online-server input { font-size: 15px !important; }
+
+@media (max-width: 640px) {
+  .on-teams { grid-template-columns: 1fr; }
+  .online .row { grid-template-columns: 1fr; gap: 6px; }
+}

@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": ["server", "src/sim", "src/ai", "src/net/state.ts", "src/net/protocol.ts", "src/net/client.ts", "src/net/match.ts", "tests/net.test.ts"]
+}
