@@ -15,6 +15,8 @@ import type { GameEvent, Snapshot } from '../sim/world.ts';
 import { buildArenaSurface, buildFloor, Goals, wallMaterial } from './arenaMesh.ts';
 import { CameraController, type CameraSettings } from './camera.ts';
 import { buildCar, type CarVisual } from './carMesh.ts';
+import { applyFlameColors, type CosmeticsHooks } from '../garage/fxRender.ts';
+import type { CarLook } from '../garage/loadout.ts';
 import { BallVisual, confettiTexture, ContactShadows, PadField, Particles, SkidMarks } from './effects.ts';
 import { DEFAULT_BOOST, FlashBalls, Shockwaves, TrailSystem, type BoostStyle, type GoalFxStyle } from './fx.ts';
 import { DynamicResolution, FpsMeter, PRESETS, QUALITY_LABELS, type QualityLevel } from './quality.ts';
@@ -41,7 +43,7 @@ const GradeShader = {
     }`,
 };
 
-export interface CarInfo { id: number; team: number; bodyIndex: number; name: string }
+export interface CarInfo { id: number; team: number; bodyIndex: number; name: string; look?: CarLook }
 
 export class GameRenderer {
   renderer: THREE.WebGLRenderer;
@@ -87,6 +89,10 @@ export class GameRenderer {
   private flash: THREE.PointLight;
   localId = -1;
   quality: QualityLevel = 'alta';
+  /** Estelas y explosiones personalizadas (garage). */
+  cosmetics: CosmeticsHooks | null = null;
+  /** Escena alternativa (garage): si existe, se dibuja en lugar del estadio. */
+  preview: { scene: THREE.Scene; camera: THREE.Camera; update(dt: number): void } | null = null;
 
   constructor(container: HTMLElement, camSettings: CameraSettings, theme: Theme = 'dia') {
     this.theme = theme;
@@ -379,7 +385,8 @@ export class GameRenderer {
     this.cars.clear();
     this.localId = localId;
     for (const c of cars) {
-      const v = buildCar(CAR_BODIES[c.bodyIndex % CAR_BODIES.length], c.team);
+      const v = buildCar(CAR_BODIES[c.bodyIndex % CAR_BODIES.length], c.team, c.look);
+      applyFlameColors(v, c.team);
       this.scene.add(v.group);
       const np = document.createElement('div');
       np.className = 'nameplate team' + c.team;
@@ -447,7 +454,8 @@ export class GameRenderer {
     switch (ev.type) {
       case 'goal': {
         const p = new THREE.Vector3(ev.pos.x, ev.pos.y, ev.pos.z);
-        this.playGoalFx(this.goalStyle(ev.team), p);
+        // Explosión personalizada del goleador (garage); si no tiene, la del estilo base del equipo
+        if (!this.cosmetics?.goal(p, ev.team, this.cars.get(ev.scorerId)?.look)) this.playGoalFx(this.goalStyle(ev.team), p);
         this.goals.impact(1 - ev.team, p, ev.speed);
         this.camCtl.shake(60);
         this.stadium.cheer(1);
@@ -505,6 +513,11 @@ export class GameRenderer {
   /** Dibuja un snapshot (ya interpolado). mode: 'play' sigue al auto local, 'replay' plano de transmisión, 'menu' órbita. */
   render(snap: Snapshot, dt: number, mode: 'play' | 'replay' | 'menu', look = { x: 0, y: 0 }, focusId = -1) {
     this.time += dt;
+    if (this.preview) {
+      this.preview.update(dt);
+      this.renderer.render(this.preview.scene, this.preview.camera);
+      return;
+    }
     const su = (this.sky?.material as THREE.ShaderMaterial | undefined)?.uniforms;
     if (su?.uTime) su.uTime.value = this.time;
     if (su?.time) su.time.value = this.time;
@@ -590,7 +603,13 @@ export class GameRenderer {
       this.airborne.set(cs.id, st);
       // Turbo: llama, chispas y humo según el estilo del auto
       v.flame.visible = cs.boosting;
-      if (cs.boosting) this.boostFx(v, cs, fwd, q);
+      if (cs.boosting) {
+        // Estela personalizada (garage); si no tiene, el turbo base (llama, chispas y humo)
+        const rear = v.rearOffset.clone().applyQuaternion(q).add(v.group.position);
+        const back = fwd.clone().multiplyScalar(-1);
+        if (!this.cosmetics?.boost(v, v.team, rear, back, new THREE.Vector3(cs.vx, cs.vy, cs.vz), dt)) this.boostFx(v, cs, fwd, q);
+        else v.flame.scale.set(0.8 + Math.random() * 0.4, 1, 1);
+      }
       // Supersónico: estela de cinta
       const tid = 'car' + cs.id;
       if (cs.supersonic) {
@@ -609,6 +628,7 @@ export class GameRenderer {
     for (let i = shadowIdx; i < 8; i++) this.contact.set(i, false);
 
     this.padField.update(snap.pads, dt, this.time);
+    this.cosmetics?.update(dt);
     this.particles.update(dt);
     this.smoke.update(dt);
     this.confetti.update(dt);
