@@ -103,6 +103,14 @@ export class ServerMatch {
     if (p) p.needFull = true;
   }
 
+  /** true si faltaron los inputs de los últimos n ticks seguidos. */
+  private recentMisses(carId: number, n: number) {
+    const m = this.miss.get(carId);
+    if (!m) return false;
+    for (let k = 1; k <= n; k++) if (!m.win[(m.i - k + LOSS_WINDOW) % LOSS_WINDOW]) return false;
+    return true;
+  }
+
   /** Fracción de ticks del último segundo en que el input del auto no llegó a tiempo. */
   inputLoss(carId: number) {
     const m = this.miss.get(carId);
@@ -164,7 +172,9 @@ export class ServerMatch {
         }
         return inp;
       }
-      // Input faltante: repetimos el último (como el estándar del género)
+      // Input faltante: repetimos el último (como el estándar del género) durante un rato corto;
+      // si deja de llegar (pestaña en segundo plano, corte), el auto suelta los controles.
+      if (m && m.n > 30 && this.recentMisses(c.id, 30)) return emptyInput();
       return this.lastInput.get(c.id) ?? emptyInput();
     });
     for (const buf of this.inputs.values()) for (const k of buf.keys()) if (k <= t) buf.delete(k);

@@ -186,6 +186,8 @@ export class OnlineMode {
         this.screen = 'home';
         break;
       case 'error': this.lastError = m.msg; if (this.active) this.toast(m.msg); break;
+      case 'pong': { const el = byId('onRtt'); if (el) el.textContent = `${Math.round(this.net?.rtt ?? 0)} ms`; return; }
+      case 'ev': return;
     }
     this.render();
   }
@@ -367,7 +369,9 @@ export class OnlineMode {
     if (cls) el.className = 'center ' + cls;
     el.textContent = text;
     this.centerTimer = text ? duration : 0;
-    if (!text) { const s = byId('subcenter'); if (s) s.textContent = ''; }
+    const sub = byId('subcenter');
+    if (sub) sub.textContent = ''; // el gol pone su subtítulo después
+
   }
 
   private feed(text: string, team: number) {
@@ -532,9 +536,26 @@ export class OnlineMode {
   private statusLine() {
     const url = this.net?.url || serverUrl();
     const s = this.status;
-    const txt = s === 'open' ? `Conectado · ${Math.round(this.net?.rtt ?? 0)} ms`
+    const txt = s === 'open' ? `Conectado · <span id="onRtt">${Math.round(this.net?.rtt ?? 0)} ms</span>`
       : s === 'connecting' ? 'Conectando…' : s === 'reconnecting' ? 'Reconectando…' : 'Sin conexión';
     return `<div class="on-status ${s}"><i></i>${txt}<span class="url">${esc(url)}</span>${s === 'closed' ? '<button class="linkbtn" data-on="retry">Reintentar</button>' : ''}</div>`;
+  }
+
+  private lastHtml = '';
+
+  /** Cambia el contenido sólo si cambió, conservando lo que se estaba escribiendo y el foco. */
+  private setHtml(root: HTMLElement, html: string) {
+    if (html === this.lastHtml) return;
+    this.lastHtml = html;
+    const focused = document.activeElement as HTMLInputElement | null;
+    const keep = [...root.querySelectorAll<HTMLInputElement>('input[id]')].map((i) => [i.id, i.value, i === focused, i.selectionStart] as const);
+    root.innerHTML = html;
+    for (const [id, value, hadFocus, sel] of keep) {
+      const el = root.querySelector<HTMLInputElement>('#' + id);
+      if (!el) continue;
+      el.value = value;
+      if (hadFocus) { el.focus(); if (sel !== null) el.setSelectionRange(sel, sel); }
+    }
   }
 
   /** Redibuja el overlay del online según el estado. */
@@ -543,11 +564,11 @@ export class OnlineMode {
     const scr = this.active ? (this.screen === 'results' ? 'results' : this.paused ? 'pause' : null) : this.screen;
     root.classList.toggle('hidden', !scr);
     root.classList.toggle('in-match', this.active);
-    if (!scr) { root.innerHTML = ''; return; }
+    if (!scr) { this.setHtml(root, ''); return; }
     const err = this.lastError ? `<div class="on-error">${esc(this.lastError)}</div>` : '';
     if (scr === 'home') {
       const c = this.createCfg;
-      root.innerHTML = `<div class="panel">
+      this.setHtml(root, `<div class="panel">
         <h2>Online</h2>
         ${this.statusLine()}
         <div class="row"><label for="onName">Tu nombre</label><input id="onName" type="text" maxlength="16" value="${esc(this.playerName())}" autocomplete="off"></div>
@@ -565,7 +586,7 @@ export class OnlineMode {
         </div>
         ${err}
         <div class="actions"><button class="btn" data-on="back">Volver</button></div>
-      </div>`;
+      </div>`);
       return;
     }
     if (scr === 'lobby' && this.room) {
@@ -582,7 +603,7 @@ export class OnlineMode {
       const others = r.players.filter((p) => !p.host && p.connected);
       const allReady = others.every((p) => p.ready);
       const playing = r.state !== 'lobby';
-      root.innerHTML = `<div class="panel wide">
+      this.setHtml(root, `<div class="panel wide">
         <div class="on-head"><h2>Sala <span class="code" id="onRoomCode">${r.code}</span></h2>
           <div class="on-share"><button class="linkbtn" data-on="copy">Copiar enlace</button><span id="onCopied"></span></div></div>
         ${this.statusLine()}
@@ -601,16 +622,16 @@ export class OnlineMode {
             ? `<button class="btn primary" data-on="start" id="onStart" ${playing || !allReady ? 'disabled' : ''}>${allReady ? 'Empezar partido' : 'Esperando que estén listos'}</button>`
             : `<button class="btn ${me?.ready ? '' : 'primary'}" data-on="ready" id="onReady" ${playing ? 'disabled' : ''}>${me?.ready ? 'No estoy listo' : '¡Estoy listo!'}</button>`}
         </div>
-      </div>`;
+      </div>`);
       return;
     }
     if (scr === 'pause') {
-      root.innerHTML = `<div class="panel narrow"><h2>Partido online</h2>
+      this.setHtml(root, `<div class="panel narrow"><h2>Partido online</h2>
         <p class="on-note">El partido sigue corriendo mientras estás en este menú.</p>
         <div class="menu-buttons">
           <button class="btn primary" data-on="resume">Seguir jugando</button>
           <button class="btn" data-on="abandon">Abandonar partido</button>
-        </div></div>`;
+        </div></div>`);
       return;
     }
     if (scr === 'results' && this.match) {
@@ -619,16 +640,16 @@ export class OnlineMode {
       const score = e?.score ?? this.match.world.score;
       const winner = e?.winner ?? this.match.world.winner;
       const title = winner === myTeam ? '¡Victoria!' : winner < 0 ? 'Empate' : 'Derrota';
-      root.innerHTML = `<div class="panel wide"><h2 id="onResult">${title}</h2>
+      this.setHtml(root, `<div class="panel wide"><h2 id="onResult">${title}</h2>
         <div class="endscore"><span class="b">${score[0]}</span> – <span class="r">${score[1]}</span></div>
         ${this.statsTable()}
         <div class="actions">
           <button class="btn" data-on="abandon">Salir</button>
           <button class="btn primary" data-on="toLobby">Volver a la sala</button>
-        </div></div>`;
+        </div></div>`);
       return;
     }
-    root.innerHTML = '';
+    this.setHtml(root, '');
     root.classList.add('hidden');
   }
 

@@ -156,7 +156,7 @@ export class Room {
     match.onEnd = (score, winner) => {
       match.broadcast({ t: 'end', score, winner });
       this.state = 'results';
-      this.resultsTimer = 10;
+      this.resultsTimer = 20;
       this.broadcastRoom();
     };
     this.match = match;

@@ -36,7 +36,11 @@ const { chromium } = loadPlaywright();
 const srv = await startServer({ port: 0, staticDir: dist, log: false });
 const origin = `http://127.0.0.1:${srv.port}`;
 const serverParam = `server=${encodeURIComponent(`ws://127.0.0.1:${srv.port}/ws`)}`;
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+// Las dos pestañas tienen que seguir corriendo aunque una quede en segundo plano
+const browser = await chromium.launch({
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
+});
 
 type Page = Awaited<ReturnType<typeof browser.newPage>>;
 interface OnlineDebug {
@@ -61,6 +65,7 @@ async function waitUntil(p: Page, what: string, cond: (s: Awaited<ReturnType<typ
     await p.waitForTimeout(150);
   }
 }
+const errorsRef: string[] = [];
 const click = (p: Page, sel: string) => p.evaluate((s) => (document.querySelector(s) as HTMLElement | null)?.click(), sel);
 
 try {
@@ -68,7 +73,7 @@ try {
   await ctx.addInitScript(() => {
     try { localStorage.setItem('turbogol.settings', JSON.stringify({ quality: 'baja', replays: false })); } catch { /* */ }
   });
-  const errors: string[] = [];
+  const errors = errorsRef;
   const A = await ctx.newPage();
   const B = await ctx.newPage();
   for (const [n, p] of [['A', A], ['B', B]] as const) {
@@ -78,9 +83,18 @@ try {
     p.on('console', (m) => { if (m.type() === 'error') errors.push(`${n} consola: ${m.text()}`); });
   }
 
+  // Cargar las dos pestañas (con render por software y la máquina cargada puede tardar)
+  const ready = (p: Page) => p.waitForFunction(() => !!(window as unknown as { __turbogol?: unknown }).__turbogol, null, { timeout: 240000 });
+  for (const p of [A, B]) {
+    const t0 = Date.now();
+    await p.bringToFront();
+    await p.goto(`${origin}/?${serverParam}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await ready(p);
+    console.log(`   (pestaña ${p === A ? 'A' : 'B'} lista en ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+  }
+
   // Pestaña A: crea una sala 1v1
-  await A.goto(`${origin}/?${serverParam}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await A.waitForFunction(() => !!(window as unknown as { __turbogol?: unknown }).__turbogol, null, { timeout: 120000 });
+  await A.bringToFront();
   await A.evaluate(() => localStorage.setItem('turbogol.name', 'Ana'));
   await click(A, '[data-act="online"]');
   await waitUntil(A, 'conexión', (s) => s.status === 'open');
@@ -89,19 +103,21 @@ try {
   const a1 = await waitUntil(A, 'sala creada', (s) => s.code.length === 5);
   check('Pestaña A crea una sala con código', /^[A-Z]{5}$/.test(a1.code), a1.code);
 
-  // Pestaña B: entra con el enlace ?room=CODE
-  await B.bringToFront(); // la pestaña A deja de dibujar mientras B carga (comparten el proceso de GPU)
-  const tB = Date.now();
-  await B.goto(`${origin}/?${serverParam}&room=${a1.code}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await B.waitForFunction(() => !!(window as unknown as { __turbogol?: unknown }).__turbogol, null, { timeout: 120000 });
+  // Pestaña B: abre el online y se une escribiendo el código
+  await B.bringToFront();
   await B.evaluate(() => localStorage.setItem('turbogol.name', 'Beto'));
-  console.log(`   (pestaña B lista en ${((Date.now() - tB) / 1000).toFixed(1)} s)`);
+  await click(B, '[data-act="online"]');
+  await waitUntil(B, 'conexión B', (s) => s.status === 'open');
+  await B.fill('#onCode', a1.code.toLowerCase());
+  await click(B, '[data-on="join"]');
   const b1 = await waitUntil(B, 'unirse', (s) => s.code === a1.code && s.players.length === 2);
-  check('Pestaña B se une por enlace a la misma sala', b1.code === a1.code, b1.players.join(', '));
+  check('Pestaña B se une con el código a la misma sala', b1.code === a1.code, b1.players.join(', '));
   const a2 = await waitUntil(A, 'lobby con 2', (s) => s.players.length === 2);
   const teams = a2.players.map((p) => p.split(':')[1]);
   check('Lobby con un jugador por equipo', teams.includes('0') && teams.includes('1'), a2.players.join(', '));
 
+  await B.bringToFront();
+  await B.waitForSelector('#onReady', { timeout: 30000 });
   await click(B, '#onReady');
   await waitUntil(A, 'B listo', (s) => s.players.some((p) => p.endsWith(':1')));
   if (shots) { fs.mkdirSync(shots, { recursive: true }); await A.screenshot({ path: path.join(shots, 'online-lobby.png') }); }
@@ -145,8 +161,8 @@ try {
   await A.waitForTimeout(1500);
   sw.clock = 0.5;
   const res = await Promise.all([A, B].map(async (p) => {
-    await p.waitForSelector('#onResult', { timeout: 30000 });
-    return p.evaluate(() => document.getElementById('onResult')!.textContent);
+    const h = await p.waitForFunction(() => document.getElementById('onResult')?.textContent, null, { timeout: 60000, polling: 200 });
+    return h.jsonValue();
   }));
   check('Resultado final en las dos pestañas', res[0] === '¡Victoria!' && res[1] === 'Derrota', `A ${res[0]} · B ${res[1]}`);
   if (shots) await B.screenshot({ path: path.join(shots, 'online-resultado.png') });
@@ -158,6 +174,7 @@ try {
   check('Sin errores en la consola', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   console.log('❌ Error:', (e as Error).message);
+  if (errorsRef.length) console.log('   Errores de página:', errorsRef.slice(0, 5).join(' | '));
   failed++;
 } finally {
   await browser.close();
