@@ -116,6 +116,7 @@ Este documento describe las funciones de práctica y de video de TURBOGOL. El c�
   - el audio se toma de la salida general del motor de sonido (`MediaStreamAudioDestinationNode`), si el navegador lo permite;
   - un clip se exporta entero y de un partido se exportan 30 s desde la posición actual;
   - durante la exportación se ocultan los controles (Esc cancela) y al terminar se descarga el `.webm`.
+  - la grabación es en tiempo real: si el equipo no llega a dibujar fluido, el video sale más lento que el juego.
 
 ## Pruebas
 

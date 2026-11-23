@@ -101,9 +101,9 @@ const check = (name, ok, detail = '') => { console.log(`${ok ? '✅' : '❌'} ${
   check('Biblioteca: clips guardados', clips >= 2, `${clips} clips`);
   await clickText('#tg-library .tg-replay:first-child button', 'Ver');
   await waitFor(() => __turbogol.ext.debug.screen === 'visor');
-  await page.waitForTimeout(1500);
-  st = await G(() => ({ state: __turbogol.state, screen: __turbogol.ext.debug.screen, time: document.querySelector('.tg-vtime')?.textContent }));
-  check('Visor: abre y reproduce', st.state === 'ext' && st.screen === 'visor' && !/^0:00 \//.test(st.time || '0:00 /'), JSON.stringify(st));
+  await waitFor(() => Number(document.querySelector('.tg-vtimeline input')?.value) > 0.05);
+  st = await G(() => ({ state: __turbogol.state, screen: __turbogol.ext.debug.screen, t: document.querySelector('.tg-vtimeline input')?.value }));
+  check('Visor: abre y reproduce', st.state === 'ext' && st.screen === 'visor' && Number(st.t) > 0.05, JSON.stringify(st));
   await shot('03-visor');
   // Velocidad, cámaras y scrub
   await clickText('.tg-viewer .seg button', '0.25×');
@@ -120,7 +120,7 @@ const check = (name, ok, detail = '') => { console.log(`${ok ? '✅' : '❌'} ${
   // Exportar WebM
   const hasExport = await G(() => [...document.querySelectorAll('.tg-viewer button')].some((b) => b.textContent.startsWith('Exportar')));
   if (hasExport) {
-    const dl = page.waitForEvent('download', { timeout: 60000 }).catch(() => null);
+    const dl = page.waitForEvent('download', { timeout: 400000 }).catch(() => null);
     await clickText('.tg-viewer button', 'Exportar');
     const d = await dl;
     let size = 0;
