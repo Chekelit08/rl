@@ -1,5 +1,6 @@
 // TURBOGOL — bucle principal: física fija a 120 Hz, render interpolado, repetición de gol, menús y HUD.
 
+import { normalizeQuality, QUALITY_LABELS, QUALITY_LEVELS, type QualityLevel } from './render/quality.ts';
 import { BallPredictor, Bot, type Difficulty, DIFFICULTY_NAMES } from './ai/bot.ts';
 import { AudioEngine } from './audio/audio.ts';
 import { InputManager } from './input/input.ts';
@@ -12,14 +13,14 @@ import { Quat } from './sim/math.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
 
 // ---------- Ajustes persistentes ----------
-interface Settings { camera: CameraSettings; volume: number; quality: 'alta' | 'baja'; replays: boolean; bodyIndex: number; theme: Theme }
+interface Settings { camera: CameraSettings; volume: number; quality: QualityLevel; replays: boolean; bodyIndex: number; theme: Theme }
 const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0, theme: 'dia' };
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem('turbogol.settings');
     if (raw) {
       const s = JSON.parse(raw);
-      return { ...DEFAULTS, ...s, camera: { ...DEFAULT_CAMERA, ...(s.camera ?? {}) } };
+      return { ...DEFAULTS, ...s, quality: normalizeQuality(s.quality), camera: { ...DEFAULT_CAMERA, ...(s.camera ?? {}) } };
     }
   } catch { /* almacenamiento no disponible */ }
   return structuredClone(DEFAULTS);
@@ -522,7 +523,7 @@ class Game {
       ['Transición', 'transition', 1, 2, 0.1, () => cam.transition, (v) => (cam.transition = v), (v) => v.toFixed(1)],
       ['Sacudida', 'shake', 0, 1, 1, () => (cam.shake ? 1 : 0), (v) => (cam.shake = v === 1), (v) => (v ? 'Sí' : 'No')],
       ['Volumen', 'volume', 0, 1, 0.05, () => this.settings.volume, (v) => (this.settings.volume = v), (v) => `${Math.round(v * 100)}%`],
-      ['Calidad', 'quality', 0, 1, 1, () => (this.settings.quality === 'alta' ? 1 : 0), (v) => (this.settings.quality = v ? 'alta' : 'baja'), (v) => (v ? 'Alta' : 'Baja')],
+      ['Calidad', 'quality', 0, 3, 1, () => QUALITY_LEVELS.indexOf(this.settings.quality), (v) => (this.settings.quality = QUALITY_LEVELS[v] ?? 'alta'), (v) => QUALITY_LABELS[QUALITY_LEVELS[v] ?? 'alta']],
       ['Estadio', 'theme', 0, 1, 1, () => (this.settings.theme === 'dia' ? 0 : 1), (v) => (this.settings.theme = v ? 'noche' : 'dia'), (v) => (v ? 'Noche' : 'Día')],
       ['Repeticiones', 'replays', 0, 1, 1, () => (this.settings.replays ? 1 : 0), (v) => (this.settings.replays = v === 1), (v) => (v ? 'Sí' : 'No')],
     ];

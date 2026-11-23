@@ -7,8 +7,8 @@ export const QUALITY_LABELS: Record<QualityLevel, string> = { baja: 'Baja', medi
 export interface QualityPreset {
   /** Tope del pixel ratio (se multiplica por la escala de resolución dinámica). */
   pixelRatio: number;
-  /** 'off' sin sombras, 'single' un mapa para toda la cancha, 'csm' cascadas que siguen a la cámara. */
-  shadows: 'off' | 'single' | 'csm';
+  /** 'off' sin sombras; 'single' un único mapa ajustado a la cancha y el techo. */
+  shadows: 'off' | 'single';
   shadowMapSize: number;
   /** Post-proceso (composer). Sin post se dibuja directo con el MSAA del canvas. */
   post: boolean;
@@ -29,8 +29,8 @@ export interface QualityPreset {
 export const PRESETS: Record<QualityLevel, QualityPreset> = {
   baja: { pixelRatio: 1, shadows: 'off', shadowMapSize: 1024, post: false, msaa: 0, gtao: 'off', bloom: false, crowdDensity: 0.35, particles: 0.45, dynamicRes: true, minScale: 0.6 },
   media: { pixelRatio: 1.25, shadows: 'single', shadowMapSize: 2048, post: true, msaa: 2, gtao: 'off', bloom: true, crowdDensity: 0.7, particles: 0.75, dynamicRes: true, minScale: 0.65 },
-  alta: { pixelRatio: 1.5, shadows: 'csm', shadowMapSize: 2048, post: true, msaa: 4, gtao: 'half', bloom: true, crowdDensity: 1, particles: 1, dynamicRes: true, minScale: 0.7 },
-  ultra: { pixelRatio: 2, shadows: 'csm', shadowMapSize: 4096, post: true, msaa: 4, gtao: 'full', bloom: true, crowdDensity: 1, particles: 1.25, dynamicRes: false, minScale: 1 },
+  alta: { pixelRatio: 1.5, shadows: 'single', shadowMapSize: 3072, post: true, msaa: 4, gtao: 'half', bloom: true, crowdDensity: 1, particles: 1, dynamicRes: true, minScale: 0.7 },
+  ultra: { pixelRatio: 2, shadows: 'single', shadowMapSize: 4096, post: true, msaa: 4, gtao: 'full', bloom: true, crowdDensity: 1, particles: 1.25, dynamicRes: false, minScale: 1 },
 };
 
 /** Normaliza valores guardados de versiones anteriores ('alta' | 'baja'). */
