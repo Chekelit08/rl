@@ -134,6 +134,7 @@ class Game {
     this.history = [];
     this.acc = 0;
     this.replay = null;
+    $('replayBadge').classList.add('hidden');
     if (!attract) {
       this.lastCfg = cfg;
       this.lastDifficulty = difficulty;
