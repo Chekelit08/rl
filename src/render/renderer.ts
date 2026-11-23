@@ -18,7 +18,7 @@ import { buildCar, type CarVisual } from './carMesh.ts';
 import { applyFlameColors, type CosmeticsHooks } from '../garage/fxRender.ts';
 import type { CarLook } from '../garage/loadout.ts';
 import { BallVisual, confettiTexture, ContactShadows, PadField, Particles, SkidMarks } from './effects.ts';
-import { DEFAULT_BOOST, FlashBalls, Shockwaves, TrailSystem, type BoostStyle, type GoalFxStyle } from './fx.ts';
+import { DEFAULT_BOOST, FlashBalls, fxUniforms, Shockwaves, TrailSystem, type BoostStyle, type GoalFxStyle } from './fx.ts';
 import { DynamicResolution, FpsMeter, PRESETS, QUALITY_LABELS, type QualityLevel } from './quality.ts';
 import { BOOST_COLOR, TEAM_COLORS, TEAM_COLORS_LIGHT } from './palette.ts';
 import { buildDaySky, buildNightSky, Stadium, type Theme } from './stadium.ts';
@@ -27,7 +27,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
 /** Gradación de color: contraste suave, saturación y viñeta (look de transmisión deportiva). */
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.28 }, uSat: { value: 1.08 }, uContrast: { value: 1.06 } },
+  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.1 }, uSat: { value: 1.04 }, uContrast: { value: 1.03 } },
   vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float uVignette; uniform float uSat; uniform float uContrast; varying vec2 vUv;
@@ -53,7 +53,7 @@ export class GameRenderer {
   particles = new Particles();
   smoke = new Particles({ additive: false, grow: 3.5, max: 3000 });
   confetti = new Particles({ additive: false, texture: confettiTexture(), max: 1500 });
-  trails = new TrailSystem(24);
+  trails = new TrailSystem(32);
   waves = new Shockwaves();
   flashes = new FlashBalls();
   padField = new PadField();
@@ -101,7 +101,7 @@ export class GameRenderer {
     this.renderer.info.autoReset = false; // acumula las llamadas de todos los pases del frame
     this.dynRes.enabled = !navigator.webdriver; // en pruebas automáticas no degradar la resolución
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(this.renderer.domElement);
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -150,14 +150,14 @@ export class GameRenderer {
       this.sky = buildDaySky(this.sunDir);
       this.scene.background = null;
       this.scene.fog = new THREE.Fog('#c9d8e6', 40000, 200000);
-      this.renderer.toneMappingExposure = 0.85;
-      g.add(new THREE.HemisphereLight('#d6e8ff', '#4e6b3d', 0.7));
+      this.renderer.toneMappingExposure = 1.0;
+      g.add(new THREE.HemisphereLight('#dcebff', '#8a9388', 0.85));
       this.sun = new THREE.DirectionalLight('#fff1dc', 2.7);
       this.sun.position.copy(this.sunDir).multiplyScalar(12000);
       this.setupShadow(this.sun);
       g.add(this.sun, this.sun.target);
       this.wallMat.uniforms.uSky.value.set('#a9c8e8');
-      this.wallMat.uniforms.uBoard.value.set('#1f2b3d');
+      this.wallMat.uniforms.uBoard.value.set('#151c28');
     } else {
       this.sky = buildNightSky();
       this.scene.background = new THREE.Color('#02060d');
@@ -178,13 +178,15 @@ export class GameRenderer {
       this.wallMat.uniforms.uBoard.value.set('#141c28');
     }
     this.wallMat.uniforms.uSunDir.value.copy(this.sunDir);
+    fxUniforms.uSolid.value = day ? 0.6 : 0.12;
+    fxUniforms.uGain.value = day ? 1.7 : 1.15;
     g.add(this.sky);
     this.stadium = new Stadium(theme);
     g.add(this.stadium.group);
     if (this.bloom) {
-      this.bloom.strength = day ? 0.18 : 0.5;
-      this.bloom.radius = day ? 0.25 : 0.5;
-      this.bloom.threshold = day ? 4.0 : 0.85;
+      this.bloom.strength = day ? 0.32 : 0.5;
+      this.bloom.radius = day ? 0.4 : 0.5;
+      this.bloom.threshold = day ? 1.35 : 0.85;
     }
     this.stadium.setSun(this.sunDir);
     this.applyStadiumQuality();
@@ -266,7 +268,7 @@ export class GameRenderer {
     l.shadow.mapSize.set(p.shadowMapSize, p.shadowMapSize);
     // Frustum ajustado a la cancha y las gradas con techo (no más grande de lo necesario)
     const sc = l.shadow.camera;
-    sc.left = -7000; sc.right = 7000; sc.top = 7000; sc.bottom = -7000; sc.near = 3000; sc.far = 22000;
+    sc.left = -10200; sc.right = 10200; sc.top = 10200; sc.bottom = -10200; sc.near = 1500; sc.far = 26000;
     l.shadow.bias = -0.0004;
     l.shadow.normalBias = 4;
   }
@@ -320,7 +322,7 @@ export class GameRenderer {
     }
     const day = this.theme === 'dia';
     if (p.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), day ? 0.18 : 0.5, day ? 0.25 : 0.5, day ? 4.0 : 0.85);
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), day ? 0.32 : 0.5, day ? 0.4 : 0.5, day ? 1.35 : 0.85);
       this.composer.addPass(this.bloom);
     }
     this.composer.addPass(new ShaderPass(GradeShader));
@@ -403,8 +405,7 @@ export class GameRenderer {
   playGoalFx(style: GoalFxStyle, p: THREE.Vector3) {
     const c1 = new THREE.Color(style.primary), c2 = new THREE.Color(style.secondary), white = new THREE.Color('#ffffff');
     const up = new THREE.Vector3(0, 0, 1);
-    this.flashes.spawn(p, c1, style.kind === 'nova' ? 1700 : 1100, style.kind === 'nova' ? 0.9 : 0.6);
-    this.waves.spawn(p, up, c1, 100, style.kind === 'nova' ? 4200 : 2600, 1.1);
+    this.goalBase(p, c1, c2, style.kind === 'nova', style.kind !== 'confeti');
     this.waves.spawn(p, new THREE.Vector3(0, 1, 0), c2, 100, style.kind === 'nova' ? 3000 : 1800, 0.9, 0.8);
     switch (style.kind) {
       case 'confeti': {
@@ -437,6 +438,17 @@ export class GameRenderer {
     this.flash.intensity = 22;
   }
 
+  /** Base común de toda explosión de gol: destello con volumen, ondas, humo del color del equipo y papelitos. */
+  goalBase(p: THREE.Vector3, c1: THREE.Color, c2: THREE.Color, big = false, confetti = true) {
+    const white = new THREE.Color('#ffffff'), up = new THREE.Vector3(0, 0, 1);
+    this.flashes.spawn(p, c1, big ? 2400 : 1800, big ? 1.0 : 0.75);
+    this.flashes.spawn(p, white, 700, 0.35);
+    this.waves.spawn(p, up, c1, 100, big ? 4600 : 3400, 1.1);
+    this.waves.spawn(p.clone().setZ(6), up, white, 60, 2200, 0.7, 0.8);
+    this.smoke.burst(p, 44, 1300, [c1, c2], 320, 1.5, 50, 1.6);
+    if (confetti) this.confetti.burst(p, 240, 2400, [c1, c2, white], 44, 3.0, -650, 0.9);
+  }
+
   private goalStyle(team: number): GoalFxStyle {
     return this.goalStyles.get(team) ?? { kind: 'clasica', primary: TEAM_COLORS[team], secondary: TEAM_COLORS_LIGHT[team] };
   }
@@ -456,6 +468,7 @@ export class GameRenderer {
         const p = new THREE.Vector3(ev.pos.x, ev.pos.y, ev.pos.z);
         // Explosión personalizada del goleador (garage); si no tiene, la del estilo base del equipo
         if (!this.cosmetics?.goal(p, ev.team, this.cars.get(ev.scorerId)?.look)) this.playGoalFx(this.goalStyle(ev.team), p);
+        else this.goalBase(p, new THREE.Color(TEAM_COLORS[ev.team]), new THREE.Color(TEAM_COLORS_LIGHT[ev.team]));
         this.goals.impact(1 - ev.team, p, ev.speed);
         this.camCtl.shake(60);
         this.stadium.cheer(1);
@@ -603,18 +616,21 @@ export class GameRenderer {
       this.airborne.set(cs.id, st);
       // Turbo: llama, chispas y humo según el estilo del auto
       v.flame.visible = cs.boosting;
+      if (!cs.boosting) this.trails.end('boost' + cs.id);
       if (cs.boosting) {
         // Estela personalizada (garage); si no tiene, el turbo base (llama, chispas y humo)
         const rear = v.rearOffset.clone().applyQuaternion(q).add(v.group.position);
         const back = fwd.clone().multiplyScalar(-1);
         if (!this.cosmetics?.boost(v, v.team, rear, back, new THREE.Vector3(cs.vx, cs.vy, cs.vz), dt)) this.boostFx(v, cs, fwd, q);
-        else v.flame.scale.set(0.8 + Math.random() * 0.4, 1, 1);
+        else v.flame.scale.set((0.8 + Math.random() * 0.4) * 1.9, 1.6, 1.6);
+        // Cinta del color de la llama: es lo que hace que el turbo se lea de lejos y a plena luz
+        this.trails.push('boost' + cs.id, rear.clone().addScaledVector(back, 30), 18, v.flameMats[0]?.color ?? new THREE.Color(BOOST_COLOR), 1, 0.22);
       }
       // Supersónico: estela de cinta
       const tid = 'car' + cs.id;
       if (cs.supersonic) {
         const back = fwd.clone().multiplyScalar(-40);
-        this.trails.push(tid, new THREE.Vector3(cs.x + back.x, cs.y + back.y, cs.z + back.z + 10), 26, new THREE.Color(TEAM_COLORS_LIGHT[v.team]).lerp(new THREE.Color('#ffffff'), 0.5), 0.55, 0.35);
+        this.trails.push(tid, new THREE.Vector3(cs.x + back.x, cs.y + back.y, cs.z + back.z + 10), 30, new THREE.Color(TEAM_COLORS_LIGHT[v.team]).lerp(new THREE.Color('#ffffff'), 0.25), 0.7, 0.45);
       } else this.trails.end(tid);
       // Nombre sobre el auto
       if (v.nameplate && cs.id !== this.localId && mode !== 'menu') {
@@ -667,7 +683,7 @@ export class GameRenderer {
   private boostFx(v: CarVisual & { team: number }, cs: Snapshot['cars'][number], fwd: THREE.Vector3, q: THREE.Quaternion) {
     const st = this.boostStyles.get(cs.id) ?? DEFAULT_BOOST[v.team] ?? DEFAULT_BOOST[0];
     const f = 0.8 + Math.random() * 0.4;
-    v.flame.scale.set(st.kind === 'humo' ? 0.35 : f * (st.kind === 'plasma' ? 1.25 : 1), st.kind === 'plasma' ? 0.6 : 1, st.kind === 'plasma' ? 0.6 : 1);
+    v.flame.scale.set(st.kind === 'humo' ? 0.5 : f * (st.kind === 'plasma' ? 2.3 : 1.9), st.kind === 'plasma' ? 1.0 : 1.6, st.kind === 'plasma' ? 1.0 : 1.6);
     const rear = v.rearOffset.clone().applyQuaternion(q).add(v.group.position);
     const back = fwd.clone().multiplyScalar(-1);
     const core = new THREE.Color(st.core), flame = new THREE.Color(st.flame), tip = new THREE.Color(st.tip);
@@ -677,7 +693,7 @@ export class GameRenderer {
         const sp = 400 + Math.random() * 300;
         this.particles.spawn(rear.x + back.x * 40, rear.y + back.y * 40, rear.z + back.z * 40,
           back.x * sp + cs.vx * 0.6 + (Math.random() - 0.5) * 120, back.y * sp + cs.vy * 0.6 + (Math.random() - 0.5) * 120, back.z * sp + cs.vz * 0.6 + (Math.random() - 0.5) * 120,
-          i === 0 ? core : flame, 38, 0.28, 0, 2, tip);
+          i === 0 ? core : flame, 46, 0.3, 0, 2, tip);
       }
     }
     if (st.sparks) {

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { BALL, BIG_PADS, SMALL_PADS } from '../sim/constants.ts';
 import { BALL_GLOW, BOOST_COLOR } from './palette.ts';
 import { glowTexture } from './stadium.ts';
+import { fxUniforms } from './fx.ts';
 
 const MAX_PARTICLES = 8000;
 
@@ -64,11 +65,13 @@ export class Particles {
     g.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('size', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('alpha', new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
+    const additive = opts.additive !== false;
     const mat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      blending: opts.additive === false ? THREE.NormalBlending : THREE.AdditiveBlending,
-      uniforms: { uTex: { value: opts.texture ?? glowTexture() }, uScale: { value: 800 } },
+      // Las luminosas suman luz y tapan parte del fondo (ver fxUniforms); humo y confeti, mezcla normal
+      ...(additive ? { blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor } : { blending: THREE.NormalBlending }),
+      uniforms: { uTex: { value: opts.texture ?? glowTexture() }, uScale: { value: 800 }, uLum: { value: additive ? 1 : 0 }, ...fxUniforms },
       vertexShader: /* glsl */ `
         attribute float size; attribute float alpha; attribute vec3 color;
         varying vec3 vCol; varying float vA; uniform float uScale;
@@ -79,10 +82,11 @@ export class Particles {
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: /* glsl */ `
-        uniform sampler2D uTex; varying vec3 vCol; varying float vA;
+        uniform sampler2D uTex; uniform float uLum; uniform float uSolid; uniform float uGain; varying vec3 vCol; varying float vA;
         void main() {
           vec4 t = texture2D(uTex, gl_PointCoord);
-          gl_FragColor = vec4(vCol * t.rgb, t.a * vA);
+          float a = t.a * vA;
+          gl_FragColor = uLum > 0.5 ? vec4(vCol * t.rgb * a * uGain, a * uSolid) : vec4(vCol * t.rgb, a);
         }`,
     });
     this.points = new THREE.Points(g, mat);

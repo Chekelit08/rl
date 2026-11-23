@@ -3,6 +3,12 @@
 
 import * as THREE from 'three';
 
+/**
+ * Mezcla de los efectos luminosos: suman luz (uGain) y además tapan parte del fondo (uSolid).
+ * De día, el aditivo puro se lava contra el césped y el cielo; de noche alcanza con muy poco.
+ */
+export const fxUniforms = { uSolid: { value: 0.6 }, uGain: { value: 1.7 } };
+
 // ---------- Estilos personalizables ----------
 
 /** Estilo de turbo de un auto (lo puede definir el garage). */
@@ -80,16 +86,18 @@ export class TrailSystem {
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+      uniforms: fxUniforms,
       vertexShader: /* glsl */ `
         attribute vec3 color; attribute float alpha; attribute float side;
         varying vec3 vCol; varying float vA; varying float vSide;
         void main() { vCol = color; vA = alpha; vSide = side; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */ `
+        uniform float uSolid; uniform float uGain;
         varying vec3 vCol; varying float vA; varying float vSide;
         void main() {
           float e = 1.0 - pow(abs(vSide * 2.0 - 1.0), 2.0);
-          gl_FragColor = vec4(vCol * vA * e, 1.0);
+          gl_FragColor = vec4(vCol * vA * e * uGain, min(1.0, vA * e) * uSolid);
         }`,
     });
     this.mesh = new THREE.Mesh(g, mat);
@@ -190,15 +198,15 @@ export class Shockwaves {
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-      uniforms: { uColor: { value: new THREE.Color() }, uAlpha: { value: 1 } },
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+      uniforms: { uColor: { value: new THREE.Color() }, uAlpha: { value: 1 }, ...fxUniforms },
       vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */ `
-        uniform vec3 uColor; uniform float uAlpha; varying vec2 vUv;
+        uniform vec3 uColor; uniform float uAlpha; uniform float uSolid; uniform float uGain; varying vec2 vUv;
         void main() {
           float r = length(vUv - 0.5) * 2.0;           // 0.82..1 en el anillo
           float band = smoothstep(0.82, 0.9, r) * (1.0 - smoothstep(0.93, 1.0, r));
-          gl_FragColor = vec4(uColor * band * uAlpha, 1.0);
+          gl_FragColor = vec4(uColor * band * uAlpha * uGain, min(1.0, band * uAlpha) * uSolid);
         }`,
     });
     const mesh = new THREE.Mesh(this.geo, mat);
@@ -246,8 +254,8 @@ export class FlashBalls {
       const mat = new THREE.ShaderMaterial({
         transparent: true,
         depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        uniforms: { uColor: { value: new THREE.Color() }, uAlpha: { value: 0 } },
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+        uniforms: { uColor: { value: new THREE.Color() }, uAlpha: { value: 0 }, ...fxUniforms },
         vertexShader: /* glsl */ `
           varying vec3 vN; varying vec3 vV;
           void main() {
@@ -256,10 +264,10 @@ export class FlashBalls {
             gl_Position = projectionMatrix * mv;
           }`,
         fragmentShader: /* glsl */ `
-          uniform vec3 uColor; uniform float uAlpha; varying vec3 vN; varying vec3 vV;
+          uniform vec3 uColor; uniform float uAlpha; uniform float uSolid; uniform float uGain; varying vec3 vN; varying vec3 vV;
           void main() {
             float f = pow(max(dot(vN, vV), 0.0), 1.5); // más denso en el centro
-            gl_FragColor = vec4(uColor * f * uAlpha, 1.0);
+            gl_FragColor = vec4(uColor * f * uAlpha * uGain, min(1.0, f * uAlpha) * uSolid * 0.8);
           }`,
       });
       const mesh = new THREE.Mesh(geo, mat);

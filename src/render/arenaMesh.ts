@@ -111,7 +111,7 @@ function boardAdsTexture(): THREE.CanvasTexture {
   g.fillRect(0, 0, 2048, 128);
   const msgs = ['TURBOGOL', 'LIGA TURBOGOL', 'FÚTBOL CON AUTOS', 'TURBOGOL', 'TEMPORADA 1', 'ESTADIO CENTRAL'];
   g.textBaseline = 'middle';
-  g.font = 'italic 900 64px "Arial Black", Arial, sans-serif';
+  g.font = '800 60px "Archivo Variable", "Arial Black", Arial, sans-serif';
   const step = 2048 / msgs.length;
   msgs.forEach((m, i) => {
     g.fillStyle = '#ffffff';
@@ -126,8 +126,6 @@ function boardAdsTexture(): THREE.CanvasTexture {
 
 /** Material de paredes realista: tablero acolchado opaco en la base (rampas) y vidrio con montantes arriba. */
 export function wallMaterial() {
-  const padNormal = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}assets/textures/tablero_normal.jpg`);
-  padNormal.wrapS = padNormal.wrapT = THREE.RepeatWrapping;
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: true,
@@ -140,7 +138,6 @@ export function wallMaterial() {
       uSky: { value: new THREE.Color('#9cc4ee') },
       uSunDir: { value: new THREE.Vector3(0.5, 0.3, 0.8).normalize() },
       uBoard: { value: new THREE.Color('#1a2433') },
-      uPadNormal: { value: padNormal },
       uAds: { value: boardAdsTexture() },
       uAdsGlow: { value: 0.35 },
     },
@@ -152,7 +149,7 @@ export function wallMaterial() {
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uBlue; uniform vec3 uRed; uniform float uTime; uniform vec3 uCam; uniform vec3 uSky; uniform vec3 uSunDir; uniform vec3 uBoard;
-      uniform sampler2D uPadNormal; uniform sampler2D uAds; uniform float uAdsGlow;
+      uniform sampler2D uAds; uniform float uAdsGlow;
       varying vec3 vPos; varying vec3 vNor;
       float line(float v, float s, float w) {
         float d = abs(fract(v / s) - 0.5) * s;
@@ -173,41 +170,31 @@ export function wallMaterial() {
         float boardTop = 300.0;
         vec3 col; float alpha;
         if (vPos.z < boardTop) {
-          // Tablero acolchado con relieve de cuero, juntas, publicidad y franja de equipo
-          vec2 puv = vec2(along, vPos.z) / 260.0;
-          vec3 pn = texture2D(uPadNormal, puv).xyz * 2.0 - 1.0;
-          vec3 t1 = normalize(cross(n, vec3(0.0001, 0.0001, 1.0)));
-          vec3 b1 = cross(t1, n);
-          vec3 nn = normalize(n + (t1 * pn.x + b1 * pn.y) * 0.6);
-          float diff = max(dot(nn, uSunDir), 0.0) * 0.55 + 0.45;
-          vec3 H = normalize(uSunDir + V);
-          float spec = pow(max(dot(nn, H), 0.0), 40.0) * 0.25;
-          float joint = line(along, 512.0, 7.0);
-          float stripe = smoothstep(boardTop - 42.0, boardTop - 34.0, vPos.z) * (1.0 - smoothstep(boardTop - 10.0, boardTop - 2.0, vPos.z));
-          float base = 1.0 - smoothstep(10.0, 16.0, vPos.z); // zócalo oscuro contra el césped
-          col = mix(uBoard, uBoard * 0.55, joint) * diff + spec;
-          // Publicidad en la cara del tablero
+          // Tablero liso y oscuro con publicidad blanca y franja de equipo
+          float diff = max(dot(n, uSunDir), 0.0) * 0.35 + 0.65;
+          float joint = line(along, 512.0, 4.0);
+          float stripe = smoothstep(boardTop - 40.0, boardTop - 34.0, vPos.z) * (1.0 - smoothstep(boardTop - 8.0, boardTop - 2.0, vPos.z));
+          col = mix(uBoard, uBoard * 0.65, joint) * diff;
           float adBand = smoothstep(70.0, 80.0, vPos.z) * (1.0 - smoothstep(220.0, 230.0, vPos.z));
           float ad = texture2D(uAds, vec2(along / 2600.0, clamp((vPos.z - 75.0) / 150.0, 0.0, 1.0))).r * adBand;
-          col = mix(col, mix(vec3(0.85), tint, 0.25) * (0.6 + uAdsGlow), ad * 0.55);
-          col = mix(col, tint * 1.15, stripe);
-          col *= 1.0 - base * 0.45;
-          col += vec3(0.12) * fres;
+          col = mix(col, vec3(0.95) * (0.75 + uAdsGlow * 0.6), ad * 0.92);
+          col = mix(col, tint, stripe);
+          col += vec3(0.05) * fres;
           alpha = 1.0;
         } else {
           // Vidrio: casi transparente, montantes metálicos y reflejo del cielo
           float diff = max(dot(n, uSunDir), 0.0) * 0.6 + 0.4;
-          float mull = line(along, 1024.0, 14.0);
-          float rail = line(vPos.z, 680.0, 10.0) * step(boardTop + 40.0, vPos.z);
+          float mull = line(along, 1024.0, 7.0);
+          float rail = line(vPos.z, 680.0, 6.0) * step(boardTop + 40.0, vPos.z);
           float top = smoothstep(ARENA_H - 70.0, ARENA_H - 20.0, vPos.z);
           float edge = smoothstep(boardTop + 18.0, boardTop, vPos.z); // perfil metálico sobre el tablero
           vec3 glass = mix(vec3(0.75, 0.85, 0.95), tint, 0.25) * 0.25;
           col = glass + uSky * fres * 0.9;
-          alpha = 0.06 + fres * 0.45;
-          vec3 metal = vec3(0.55, 0.6, 0.66) * diff;
+          alpha = 0.04 + fres * 0.38;
+          vec3 metal = vec3(0.86, 0.89, 0.93) * diff;
           float frame = max(max(mull, rail), edge);
           col = mix(col, metal, frame * 0.9);
-          alpha = max(alpha, frame * 0.85);
+          alpha = max(alpha, frame * 0.5);
           col = mix(col, metal * 1.2, top);
           alpha = max(alpha, top);
         }
@@ -232,64 +219,27 @@ function floorShape(): THREE.Shape {
   return s;
 }
 
-/** Césped natural cortado en franjas (las líneas se dibujan analíticamente en el shader). */
+/** Césped parejo cortado en franjas de dos tonos (las líneas se dibujan analíticamente en el shader). */
 function floorTexture(): THREE.CanvasTexture {
-  const W = 2048, H = 3000; // 4 uu por px
+  const W = 1024, H = 1500; // 8 uu por px
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d')!;
-  const sx = W / 8192, sy = H / 12000;
-  const X = (x: number) => (x + 4096) * sx;
+  const sy = H / 12000;
   const Y = (y: number) => H - (y + 6000) * sy;
-
   // Franjas de corte (claras/oscuras) a lo largo
   for (let i = 0; i < 24; i++) {
-    g.fillStyle = i % 2 ? '#3d7a32' : '#38722e';
+    g.fillStyle = i % 2 ? '#4b8f45' : '#43853f';
     g.fillRect(0, Y(-6000 + (i + 1) * 500), W, 500 * sy + 1);
   }
-  // Variación orgánica: manchas suaves
-  for (let i = 0; i < 900; i++) {
-    const x = Math.random() * W, y = Math.random() * H, r = 20 + Math.random() * 90;
-    const grd = g.createRadialGradient(x, y, 0, x, y, r);
-    const c = Math.random() < 0.5 ? '255,255,200' : '0,30,0';
-    grd.addColorStop(0, `rgba(${c},0.05)`);
-    grd.addColorStop(1, `rgba(${c},0)`);
-    g.fillStyle = grd;
-    g.fillRect(x - r, y - r, r * 2, r * 2);
-  }
-  // Zonas más gastadas (centro, áreas y frente al arco)
-  for (const [wx, wy, wr] of [[0, 0, 900], [0, 4500, 1100], [0, -4500, 1100], [0, 4950, 600], [0, -4950, 600]] as const) {
-    const grd = g.createRadialGradient(X(wx), Y(wy), 0, X(wx), Y(wy), wr * sx);
-    grd.addColorStop(0, 'rgba(120,110,60,0.10)');
-    grd.addColorStop(1, 'rgba(120,110,60,0)');
-    g.fillStyle = grd;
-    g.fillRect(X(wx) - wr * sx, Y(wy) - wr * sy, wr * 2 * sx, wr * 2 * sy);
-  }
-  // Grano fino
-  const img = g.getImageData(0, 0, W, H);
-  for (let i = 0; i < img.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 16;
-    img.data[i] += n * 0.7; img.data[i + 1] += n; img.data[i + 2] += n * 0.5;
-  }
-  g.putImageData(img, 0, 0);
   // Tinte de equipo muy sutil en cada área
   for (const [t, y0] of [[0, -5120], [1, 5120]] as const) {
-    const grd = g.createLinearGradient(0, Y(y0), 0, Y(y0 * 0.6));
-    grd.addColorStop(0, t === 0 ? 'rgba(46,139,255,0.16)' : 'rgba(255,51,85,0.16)');
+    const grd = g.createLinearGradient(0, Y(y0), 0, Y(y0 * 0.62));
+    grd.addColorStop(0, t === 0 ? 'rgba(46,139,255,0.20)' : 'rgba(255,51,85,0.20)');
     grd.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grd;
-    g.fillRect(0, Math.min(Y(y0), Y(y0 * 0.6)), W, Math.abs(Y(y0) - Y(y0 * 0.6)));
+    g.fillRect(0, Math.min(Y(y0), Y(y0 * 0.62)), W, Math.abs(Y(y0) - Y(y0 * 0.62)));
   }
-  // Logo central pintado en el césped
-  g.save();
-  g.translate(X(0), Y(0));
-  g.font = 'italic 900 66px "Arial Black", Arial, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillStyle = 'rgba(255,255,255,0.18)';
-  g.fillText('TURBOGOL', 0, 0);
-  g.restore();
-
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 16;
@@ -374,7 +324,7 @@ export function buildFloor(): THREE.Mesh {
   const rough = rep(loader.load(base + 'pasto_rugosidad.jpg'), 90);
   const detail = rep(loader.load(base + 'pasto_detalle.jpg'), 140);
   const mat = new THREE.MeshStandardMaterial({
-    map: floorTexture(), normalMap: normal, normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: rough, roughness: 1, metalness: 0,
+    map: floorTexture(), normalMap: normal, normalScale: new THREE.Vector2(0.45, 0.45), roughnessMap: rough, roughness: 1, metalness: 0,
   });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uDetail = { value: detail };
@@ -387,7 +337,7 @@ export function buildFloor(): THREE.Mesh {
         // Detalle de pasto a dos escalas (evita que se note la repetición)
         float d1 = texture2D(uDetail, vWPos.xy / vec2(58.5, 58.5)).r;
         float d2 = texture2D(uDetail, vWPos.xy / vec2(356.0, 356.0)).r;
-        diffuseColor.rgb *= 0.78 + 0.32 * d1 + 0.22 * (d2 - 0.5);
+        diffuseColor.rgb *= 0.9 + 0.16 * d1 + 0.1 * (d2 - 0.5);
         // Franjas de corte que cambian con el ángulo de visión (como en una cancha real)
         float stripe = mod(floor((vWPos.y + 6000.0) / 500.0), 2.0) * 2.0 - 1.0;
         vec2 vd = normalize(cameraPosition.xy - vWPos.xy + vec2(0.0001));
@@ -395,7 +345,7 @@ export function buildFloor(): THREE.Mesh {
         diffuseColor.rgb *= 1.0 + stripe * vd.y * (0.10 + 0.12 * grazing);
         // Líneas pintadas sobre el pasto (conservan algo del grano del césped)
         float fl = fieldLines(vWPos.xy);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.88, 0.86) * (0.9 + 0.12 * d1), fl * 0.92);`);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96, 0.97, 0.95) * (0.95 + 0.06 * d1), fl * 0.96);`);
   };
   mat.customProgramCacheKey = () => 'turbogol-floor';
   const m = new THREE.Mesh(geo, mat);
