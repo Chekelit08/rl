@@ -1,5 +1,6 @@
 // TURBOGOL — bucle principal: física fija a 120 Hz, render interpolado, repetición de gol, menús y HUD.
 
+import { normalizeQuality, QUALITY_LABELS, QUALITY_LEVELS, type QualityLevel } from './render/quality.ts';
 import { BallPredictor, Bot, type Difficulty, DIFFICULTY_NAMES } from './ai/bot.ts';
 import { AudioEngine, DEFAULT_MIX, type MixSettings } from './audio/audio.ts';
 import { InputManager } from './input/input.ts';
@@ -12,14 +13,14 @@ import { Quat } from './sim/math.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
 
 // ---------- Ajustes persistentes ----------
-interface Settings { camera: CameraSettings; volume: number; quality: 'alta' | 'baja'; replays: boolean; bodyIndex: number; theme: Theme; mix: MixSettings }
+interface Settings { camera: CameraSettings; volume: number; quality: QualityLevel; replays: boolean; bodyIndex: number; theme: Theme; mix: MixSettings }
 const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0, theme: 'dia', mix: { ...DEFAULT_MIX } };
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem('turbogol.settings');
     if (raw) {
       const s = JSON.parse(raw);
-      return { ...DEFAULTS, ...s, camera: { ...DEFAULT_CAMERA, ...(s.camera ?? {}) }, mix: { ...DEFAULT_MIX, ...(s.mix ?? {}) } };
+      return { ...DEFAULTS, ...s, quality: normalizeQuality(s.quality), camera: { ...DEFAULT_CAMERA, ...(s.camera ?? {}) }, mix: { ...DEFAULT_MIX, ...(s.mix ?? {}) } };
     }
   } catch { /* almacenamiento no disponible */ }
   return structuredClone(DEFAULTS);
@@ -512,7 +513,7 @@ class Game {
       ...(['motor', 'efectos', 'publico', 'musica', 'ui'] as const).map((k): [string, string, number, number, number, () => number, (v: number) => void, (v: number) => string] =>
         [{ motor: '· Motor', efectos: '· Efectos', publico: '· Público', musica: '· Música', ui: '· Interfaz' }[k], 'mix-' + k, 0, 1, 0.05, () => this.settings.mix[k], (v) => (this.settings.mix[k] = v), (v) => `${Math.round(v * 100)}%`]),
       ['Vibración', 'haptics', 0, 1, 1, () => (this.settings.mix.haptics ? 1 : 0), (v) => (this.settings.mix.haptics = v === 1), (v) => (v ? 'Sí' : 'No')],
-      ['Calidad', 'quality', 0, 1, 1, () => (this.settings.quality === 'alta' ? 1 : 0), (v) => (this.settings.quality = v ? 'alta' : 'baja'), (v) => (v ? 'Alta' : 'Baja')],
+      ['Calidad', 'quality', 0, 3, 1, () => QUALITY_LEVELS.indexOf(this.settings.quality), (v) => (this.settings.quality = QUALITY_LEVELS[v] ?? 'alta'), (v) => QUALITY_LABELS[QUALITY_LEVELS[v] ?? 'alta']],
       ['Estadio', 'theme', 0, 1, 1, () => (this.settings.theme === 'dia' ? 0 : 1), (v) => (this.settings.theme = v ? 'noche' : 'dia'), (v) => (v ? 'Noche' : 'Día')],
       ['Repeticiones', 'replays', 0, 1, 1, () => (this.settings.replays ? 1 : 0), (v) => (this.settings.replays = v === 1), (v) => (v ? 'Sí' : 'No')],
     ];

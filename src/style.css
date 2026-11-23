@@ -116,3 +116,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #02060d; col
   .slider { grid-template-columns: 110px 1fr 48px; }
   #menu { padding-left: 16px; }
 }
+
+/* Contador de fps (F3) */
+.fps-meter { position: fixed; left: 10px; bottom: 10px; z-index: 30; padding: 4px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.55); color: #cfe8ff; font: 600 12px/1.2 ui-monospace, Menlo, Consolas, monospace; pointer-events: none; }
