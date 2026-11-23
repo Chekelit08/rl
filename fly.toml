@@ -1,0 +1,37 @@
+# Despliegue en Fly.io (ver docs/05-online.md).
+#   fly launch --copy-config --no-deploy   (elegí un nombre de app libre)
+#   fly deploy && fly scale count 1
+# Las salas viven en memoria: usá UNA sola máquina.
+
+app = "turbogol"
+primary_region = "gru"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  SNAPSHOT_HZ = "60"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 150
+    hard_limit = 200
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -3,13 +3,16 @@
 // - Si existe dist/ (npm run build), también sirve el juego en el mismo puerto: un solo proceso para desplegar.
 //
 // Uso:  npm run server          (puerto 8787; variable PORT para cambiarlo)
+// Variables: PORT, SNAPSHOT_HZ=60|30 (snapshots por segundo; con 30 se manda la mitad, también comprimidos).
 
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { DEFAULT_PORT } from '../src/net/protocol.ts';
+import { serverOptions } from './match.ts';
 import { Lobby } from './rooms.ts';
 
 const MIME: Record<string, string> = {
@@ -94,6 +97,10 @@ export function startServer(opts: { port?: number; staticDir?: string | null; lo
       const port = typeof addr === 'object' && addr ? addr.port : (opts.port ?? DEFAULT_PORT);
       if (log) {
         console.log(`[online] TURBOGOL escuchando en el puerto ${port} (WebSocket: /ws)${hasStatic ? ' · sirviendo dist/' : ''}`);
+        console.log(`[online] snapshots a ${120 / serverOptions.snapshotEvery} Hz`);
+        for (const ip of lanAddresses()) {
+          console.log(`[online] en la red local: ${hasStatic ? `http://${ip}:${port}  (juego + servidor)` : `ws://${ip}:${port}`}`);
+        }
       }
       resolve({
         port,
@@ -110,8 +117,18 @@ export function startServer(opts: { port?: number; staticDir?: string | null; lo
   });
 }
 
+/** IPv4 de la máquina en la red local (para jugar en LAN). */
+function lanAddresses(): string[] {
+  const out: string[] = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list ?? []) if (a.family === 'IPv4' && !a.internal) out.push(a.address);
+  }
+  return out;
+}
+
 // Ejecutado directamente: arrancar con la configuración del entorno
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
+  if (Number(process.env.SNAPSHOT_HZ) === 30) serverOptions.snapshotEvery = 4;
   void startServer({ port: Number(process.env.PORT) || DEFAULT_PORT });
 }
