@@ -403,11 +403,11 @@ export class GameRenderer {
       case 'confeti': {
         const cols = [c1, c2, white, new THREE.Color('#ffd166')];
         this.confetti.burst(p, 420, 2200, cols, 46, 3.2, -650, 0.9);
-        this.particles.burst(p, 200, 1800, [c1, white], 60, 1.2, -400);
+        this.particles.burst(p, 200, 1800, [c1, white], 30, 1.2, -400);
         break;
       }
       case 'chispas': {
-        this.particles.burst(p, 700, 3200, [c1, c2, white], 36, 1.6, -900, 0.8);
+        this.particles.burst(p, 700, 3200, [c1, c2, white], 20, 1.6, -900, 0.8);
         for (let i = 0; i < 70; i++) {
           const a = Math.random() * Math.PI * 2, s = 600 + Math.random() * 900;
           this.particles.spawn(p.x, p.y, p.z, Math.cos(a) * s * 0.5, Math.sin(a) * s * 0.5, 1800 + Math.random() * 1800, i % 2 ? c1 : c2, 50, 1.6, -1400, 0.4, white);
@@ -415,19 +415,19 @@ export class GameRenderer {
         break;
       }
       case 'nova': {
-        this.particles.burst(p, 1100, 3600, [c1, c2, white], 90, 2, -300, 1.0);
-        this.particles.burst(p, 360, 1100, [white, c2], 150, 1.3, 0);
+        this.particles.burst(p, 1100, 3600, [c1, c2, white], 36, 2, -300, 1.0);
+        this.particles.burst(p, 360, 1100, [white, c2], 70, 1.3, 0);
         this.waves.spawn(p, new THREE.Vector3(1, 0, 0), c1, 100, 2400, 1.0, 0.7);
         break;
       }
       default: {
-        this.particles.burst(p, 900, 2600, [c1, new THREE.Color(style.secondary), white], 70, 1.8, -500);
-        this.particles.burst(p, 300, 900, [white, new THREE.Color(BOOST_COLOR)], 120, 1.2, 0);
+        this.particles.burst(p, 900, 2600, [c1, c2, white], 28, 1.8, -500, 1.2, white);
+        this.particles.burst(p, 260, 900, [white, new THREE.Color(BOOST_COLOR)], 60, 1.0, 0);
       }
     }
     this.flash.position.copy(p);
     this.flash.color.copy(c1);
-    this.flash.intensity = 40;
+    this.flash.intensity = 22;
   }
 
   private goalStyle(team: number): GoalFxStyle {

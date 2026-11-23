@@ -272,6 +272,12 @@ export class Stadium {
       map: loadTex('concreto_color.jpg', [1, 1], true), normalMap: loadTex('concreto_normal.jpg', [1, 1]),
       color: '#b9bcc2', roughness: 0.92, side: THREE.DoubleSide,
     });
+    // El hormigón fotográfico tira a marrón: se desatura para que lea como cemento y no como tierra
+    concMat.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        diffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), diffuseColor.rgb, 0.22) * vec3(0.96, 0.99, 1.04);`);
+    };
+    concMat.customProgramCacheKey = () => 'turbogol-conc';
     const darkMat = new THREE.MeshStandardMaterial({ color: '#232830', roughness: 0.85, metalness: 0.2, side: THREE.DoubleSide });
     const steel = new THREE.MeshStandardMaterial({ color: '#7d8794', metalness: 0.85, roughness: 0.35 });
     const concGeos: THREE.BufferGeometry[] = [];
