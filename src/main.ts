@@ -96,6 +96,7 @@ class Game {
   /** Partida competitiva en curso (contra bots, con rango). */
   private ranked: { playlist: Playlist; diffs: number[] } | null = null;
   private matchDone = false;
+  private endShown = false;
   private report: { xp: XpReport | null; ranked: RankedOutcome | null } = { xp: null, ranked: null };
   private tally = { clears: 0, centers: 0, aerialHits: 0, firstTouches: 0, epicSaves: 0, fastestGoalKmh: 0 };
 
@@ -158,6 +159,7 @@ class Game {
       this.lastCfg = cfg;
       this.lastDifficulty = difficulty;
       this.matchDone = false;
+      this.endShown = false;
       this.report = { xp: null, ranked: null };
       this.tally = { clears: 0, centers: 0, aerialHits: 0, firstTouches: 0, epicSaves: 0, fastestGoalKmh: 0 };
       this.ui?.points.reset();
@@ -488,7 +490,7 @@ class Game {
 
     if (this.state === 'ended') {
       this.endTimer -= dt;
-      if (this.endTimer <= 0 && $('end').classList.contains('hidden')) this.showEnd();
+      if (this.endTimer <= 0 && !this.endShown) { this.endShown = true; this.showEnd(); }
     }
   }
 
