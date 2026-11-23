@@ -4,9 +4,9 @@
 import type { CarInput } from '../sim/car.ts';
 import type { GameEvent, MatchConfig } from '../sim/world.ts';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const DEFAULT_PORT = 8787;
-/** Ticks entre snapshots (2 = 60 Hz, 4 = 30 Hz). El servidor baja a 30 Hz si un cliente se congestiona. */
+/** Ticks entre snapshots (2 = 60 Hz, 4 = 30 Hz). El servidor baja a 30 Hz si un cliente se congestiona (o con SNAPSHOT_HZ=30). */
 export const SNAPSHOT_EVERY = 2;
 export const SNAPSHOT_EVERY_SLOW = 4;
 /** Los dos lados cuantizan el estado en múltiplos de este número de ticks. */
@@ -26,6 +26,7 @@ export type ClientMsg =
   | { t: 'start' }
   | { t: 'leave' }
   | { t: 'lobby' }
+  | { t: 'resync' }
   | { t: 'ping'; c: number };
 
 export type ServerMsg =
@@ -101,12 +102,20 @@ export function decodeInputs(buf: ArrayBuffer): { ackSeq: number; lastTick: numb
 
 // ---------- Snapshots con delta ----------
 
-export interface SnapshotHeader { seq: number; tick: number; baseline: number; slack: number; sig: number }
-const SNAP_HEADER = 1 + 4 + 4 + 4 + 2 + 4 + 2 + 1;
+export interface SnapshotHeader {
+  seq: number; tick: number; baseline: number; slack: number; sig: number;
+  /** Fracción de ticks recientes en que el input de este jugador no llegó a tiempo al servidor (0..1). */
+  loss: number;
+}
+const SNAP_HEADER = 1 + 4 + 4 + 4 + 2 + 4 + 2 + 1 + 1;
+
+const u32Of = (a: Float32Array) => new Uint32Array(a.buffer, a.byteOffset, a.length);
 
 /**
- * Snapshot: estado completo en float32, o sólo los valores que cambiaron respecto de una línea base
- * que el cliente ya confirmó (máscara de bits + valores).
+ * Snapshot: estado completo en float32, o delta contra el último estado que recibió el cliente
+ * (WebSocket es confiable y ordenado). El delta lleva una máscara de bits de los valores que cambiaron y,
+ * por cada uno, el XOR de sus bits contra la línea base sin los bytes altos en cero (2 bits de largo + 1..4 bytes):
+ * los valores que cambian poco comparten signo, exponente y la parte alta de la mantisa.
  */
 export function encodeSnapshot(h: SnapshotHeader, flat: Float32Array, base: Float32Array | null): ArrayBuffer {
   const n = flat.length;
@@ -114,18 +123,25 @@ export function encodeSnapshot(h: SnapshotHeader, flat: Float32Array, base: Floa
   let buf: ArrayBuffer;
   let dv: DataView;
   if (useDelta) {
+    const a = u32Of(flat), b = u32Of(base!);
     const maskBytes = (n + 7) >> 3;
-    let changed = 0;
-    for (let i = 0; i < n; i++) if (!Object.is(flat[i], base![i])) changed++;
-    buf = new ArrayBuffer(SNAP_HEADER + maskBytes + changed * 4);
-    dv = new DataView(buf);
-    let o = SNAP_HEADER + maskBytes;
+    const idx: number[] = [], xs: number[] = [];
+    let bytes = 0;
     for (let i = 0; i < n; i++) {
-      if (!Object.is(flat[i], base![i])) {
-        dv.setUint8(SNAP_HEADER + (i >> 3), dv.getUint8(SNAP_HEADER + (i >> 3)) | (1 << (i & 7)));
-        dv.setFloat32(o, flat[i]);
-        o += 4;
-      }
+      const x = (a[i] ^ b[i]) >>> 0;
+      if (x !== 0) { idx.push(i); xs.push(x); bytes += x > 0xffffff ? 4 : x > 0xffff ? 3 : x > 0xff ? 2 : 1; }
+    }
+    const lenBytes = (idx.length + 3) >> 2;
+    buf = new ArrayBuffer(SNAP_HEADER + maskBytes + lenBytes + bytes);
+    dv = new DataView(buf);
+    const mo = SNAP_HEADER, lo = mo + maskBytes;
+    let o = lo + lenBytes;
+    for (let k = 0; k < idx.length; k++) {
+      const i = idx[k], x = xs[k];
+      dv.setUint8(mo + (i >> 3), dv.getUint8(mo + (i >> 3)) | (1 << (i & 7)));
+      const L = x > 0xffffff ? 4 : x > 0xffff ? 3 : x > 0xff ? 2 : 1;
+      dv.setUint8(lo + (k >> 2), dv.getUint8(lo + (k >> 2)) | ((L - 1) << ((k & 3) * 2)));
+      for (let j = L - 1; j >= 0; j--) dv.setUint8(o++, (x >>> (j * 8)) & 0xff);
     }
   } else {
     buf = new ArrayBuffer(SNAP_HEADER + n * 4);
@@ -140,6 +156,7 @@ export function encodeSnapshot(h: SnapshotHeader, flat: Float32Array, base: Floa
   dv.setUint32(15, h.sig >>> 0);
   dv.setUint16(19, n);
   dv.setUint8(21, useDelta ? 1 : 0);
+  dv.setUint8(22, Math.max(0, Math.min(255, Math.round(h.loss * 255))));
   return buf;
 }
 
@@ -147,11 +164,11 @@ export function decodeSnapshotHeader(buf: ArrayBuffer): SnapshotHeader & { n: nu
   const dv = new DataView(buf);
   return {
     seq: dv.getUint32(1), tick: dv.getUint32(5), baseline: dv.getUint32(9), slack: dv.getInt16(13),
-    sig: dv.getUint32(15), n: dv.getUint16(19), delta: dv.getUint8(21) === 1,
+    sig: dv.getUint32(15), n: dv.getUint16(19), delta: dv.getUint8(21) === 1, loss: dv.getUint8(22) / 255,
   };
 }
 
-/** Reconstruye el estado completo. Devuelve null si falta la línea base. */
+/** Reconstruye el estado completo. Devuelve null si falta la línea base o no coincide. */
 export function decodeSnapshotBody(buf: ArrayBuffer, base: Float32Array | null): Float32Array | null {
   const h = decodeSnapshotHeader(buf);
   const dv = new DataView(buf);
@@ -161,11 +178,21 @@ export function decodeSnapshotBody(buf: ArrayBuffer, base: Float32Array | null):
     return out;
   }
   if (!base || base.length !== h.n) return null;
+  const a = u32Of(out), b = u32Of(base);
   const maskBytes = (h.n + 7) >> 3;
-  let o = SNAP_HEADER + maskBytes;
+  let changed = 0;
+  for (let i = 0; i < maskBytes; i++) { let m = dv.getUint8(SNAP_HEADER + i); while (m) { changed += m & 1; m >>= 1; } }
+  const mo = SNAP_HEADER, lo = mo + maskBytes;
+  let o = lo + ((changed + 3) >> 2);
+  let k = 0;
   for (let i = 0; i < h.n; i++) {
-    if (dv.getUint8(SNAP_HEADER + (i >> 3)) & (1 << (i & 7))) { out[i] = dv.getFloat32(o); o += 4; }
-    else out[i] = base[i];
+    if (dv.getUint8(mo + (i >> 3)) & (1 << (i & 7))) {
+      const L = ((dv.getUint8(lo + (k >> 2)) >> ((k & 3) * 2)) & 3) + 1;
+      let x = 0;
+      for (let j = 0; j < L; j++) x = ((x << 8) | dv.getUint8(o++)) >>> 0;
+      a[i] = (b[i] ^ x) >>> 0;
+      k++;
+    } else a[i] = b[i];
   }
   return out;
 }

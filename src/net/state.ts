@@ -28,18 +28,25 @@ export class NetRng {
   };
 }
 
-/** Campos internos (privados en TS) del mundo que el online necesita leer y escribir. */
-interface WorldInternals { rand: () => number; lastCountdown: number; __netRng?: NetRng }
+/**
+ * Campos internos (privados en TS) del mundo. Son opcionales: si la simulación los renombra o los quita,
+ * el online sigue andando (sólo se pierde precisión en la predicción de saques y reapariciones, que de
+ * todos modos corrige el servidor). Servidor y cliente corren el mismo código, así que coinciden.
+ */
+interface WorldInternals { rand?: () => number; lastCountdown?: number; __netRng?: NetRng }
 const internals = (w: World) => w as unknown as WorldInternals;
 
 /** Instala un PRNG serializable en el mundo (servidor y cliente lo hacen igual, con la misma semilla). */
 export function installNetRng(world: World, seed: number): NetRng {
   const r = new NetRng(seed);
   const w = internals(world);
-  w.rand = r.next;
+  if (typeof w.rand === 'function') w.rand = r.next;
   w.__netRng = r;
   return r;
 }
+
+/** Los Map (p. ej. enfriamientos por auto) viajan con una cantidad fija de pares: el tamaño del estado no cambia. */
+const MAP_SLOTS = 8;
 
 // ---------- Recorrido genérico ----------
 
@@ -51,8 +58,11 @@ function writeValue(v: unknown, out: number[], skip?: Set<string>): void {
   if (v instanceof Map) {
     const entries = [...v.entries()].filter(([k, val]) => typeof k === 'number' && typeof val === 'number');
     entries.sort((a, b) => (a[0] as number) - (b[0] as number));
-    out.push(entries.length);
-    for (const [k, val] of entries) out.push(k as number, val as number);
+    for (let i = 0; i < MAP_SLOTS; i++) {
+      const e = entries[i];
+      if (e) out.push(e[0] as number, e[1] as number);
+      else out.push(-1, 0);
+    }
     return;
   }
   if (Array.isArray(v)) {
@@ -84,9 +94,11 @@ function readValue(cur: unknown, r: Reader, skip?: Set<string>): unknown {
   if (cur instanceof V3) return new V3(r.next(), r.next(), r.next());
   if (cur instanceof Quat) return new Quat(r.next(), r.next(), r.next(), r.next());
   if (cur instanceof Map) {
-    const n = r.next();
     const m = new Map<number, number>();
-    for (let i = 0; i < n; i++) { const k = r.next(); m.set(k, r.next()); }
+    for (let i = 0; i < MAP_SLOTS; i++) {
+      const k = r.next(), val = r.next();
+      if (k !== -1) m.set(k, val);
+    }
     // conservar entradas no numéricas (no serializadas), si las hubiera
     for (const [k, val] of cur) if (typeof k !== 'number' || typeof val !== 'number') m.set(k as number, val as number);
     return m;
@@ -142,7 +154,8 @@ function hashStr(s: string) {
 
 /** Hash de la estructura del estado (debe coincidir entre servidor y cliente). */
 export function stateSignature(world: World): number {
-  const acc: string[] = [`cars${world.cars.length}`, `pads${world.pads.length}`];
+  const wi = internals(world);
+  const acc: string[] = [`cars${world.cars.length}`, `pads${world.pads.length}`, `rng${typeof wi.rand}`, `cd${typeof wi.lastCountdown}`];
   signatureOf(world.ball, SKIP_BALL, acc, 'ball');
   // Todos los autos comparten clase: con uno alcanza
   if (world.cars[0]) signatureOf(world.cars[0], SKIP_CAR, acc, 'car');
@@ -157,7 +170,7 @@ export function captureWorld(world: World): number[] {
   const wi = internals(world);
   const out: number[] = [];
   out.push(w.tick, PHASES.indexOf(w.phase), w.phaseTimer, w.clock, w.overtime ? 1 : 0, w.zeroClock ? 1 : 0);
-  out.push(w.score[0], w.score[1], w.winner, wi.lastCountdown);
+  out.push(w.score[0], w.score[1], w.winner, wi.lastCountdown ?? 0);
   const lg = w.lastGoal;
   out.push(lg ? 1 : 0, lg ? lg.team : 0, lg ? lg.scorerId : 0, lg ? lg.tick : 0);
   const s = wi.__netRng ? wi.__netRng.s : 0;
@@ -183,7 +196,8 @@ export function restoreWorld(world: World, flat: ArrayLike<number>) {
   w.score[0] = r.next();
   w.score[1] = r.next();
   w.winner = r.next();
-  wi.lastCountdown = r.next();
+  const lc = r.next();
+  if (typeof wi.lastCountdown === 'number') wi.lastCountdown = lc;
   const hasGoal = r.next() !== 0;
   const team = r.next(), scorerId = r.next(), gtick = r.next();
   w.lastGoal = hasGoal ? { team, scorerId, tick: gtick } : null;

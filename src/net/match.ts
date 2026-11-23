@@ -13,7 +13,7 @@ import {
   AUTHORITATIVE_EVENTS, decodeSnapshotBody, decodeSnapshotHeader, encodeInputs, FULL, PREDICTED_EVENTS,
   quantizeInput, type RosterEntry, type ServerMsg,
 } from './protocol.ts';
-import { captureWorld, installNetRng, maxDiff, quantizeWorldInPlace, restoreWorld, stateSignature } from './state.ts';
+import { installNetRng, maxDiff, quantizeWorldInPlace, restoreWorld, stateSignature } from './state.ts';
 
 export interface MatchStartInfo {
   matchId: number;
@@ -88,13 +88,22 @@ class Smoother {
 export interface NetStats {
   ping: number;
   jitter: number;
-  loss: number; // 0..1
+  /** Fracción de inputs propios que no llegaron a tiempo al servidor (0..1). */
+  loss: number;
   rollbacks: number;
   resimTicks: number;
   slack: number;
   timeScale: number;
   lead: number;
   maxCorrection: number;
+  /** Snapshots comparados contra la predicción y cuántos coincidieron bit a bit. */
+  checked: number;
+  exact: number;
+  /** Error de posición del auto propio entre lo predicho y lo que dijo el servidor (último y máximo). */
+  localErr: number;
+  localErrMax: number;
+  /** Bytes por segundo recibidos en snapshots (promedio móvil). */
+  bytesPerSec: number;
 }
 
 export class OnlineMatch {
@@ -104,24 +113,35 @@ export class OnlineMatch {
   info: MatchStartInfo;
   ready = false; // recibió el primer estado
   incompatible = '';
-  stats: NetStats = { ping: 0, jitter: 0, loss: 0, rollbacks: 0, resimTicks: 0, slack: 0, timeScale: 1, lead: 0, maxCorrection: 0 };
+  stats: NetStats = {
+    ping: 0, jitter: 0, loss: 0, rollbacks: 0, resimTicks: 0, slack: 0, timeScale: 1, lead: 0, maxCorrection: 0,
+    checked: 0, exact: 0, localErr: 0, localErrMax: 0, bytesPerSec: 0,
+  };
+  /** Último tick del servidor recibido. */
+  serverTick = 0;
 
   private net: NetClient;
   private inputs = new Map<number, CarInput>();
   private lastLocal: CarInput = emptyInput();
   private history = new Map<number, Float32Array>();
-  private received = new Map<number, Float32Array>();
+  private base: Float32Array | null = null;
   private lastSeq = 0;
   private ackSeq = FULL;
-  private lastServerTick = 0;
   private lastServerAt = 0;
   private acc = 0;
   private timeScale = 1;
   private slack = 0;
   private smoother = new Smoother();
   private pendingEvents: GameEvent[] = [];
-  private seqWindow: number[] = [];
-  private flatLen = -1;
+  private scratch: World;
+  private resyncAt = 0;
+  private bytesWin: { t: number; b: number }[] = [];
+  private pending: { tick: number; flat: Float32Array } | null = null;
+  private lastRollbackAt = 0;
+  /** Lo que tarda una corrección (ms, promedio móvil): limita cuántas por segundo hacemos. */
+  private rollbackCost = 0;
+  /** Fracción máxima del tiempo que dedicamos a re-simular. */
+  rollbackBudget = 0.2;
 
   constructor(net: NetClient, info: MatchStartInfo) {
     this.net = net;
@@ -129,6 +149,7 @@ export class OnlineMatch {
     this.roster = info.roster;
     this.localId = info.yourCarId;
     this.world = buildWorldFromRoster(info.cfg, info.roster);
+    this.scratch = buildWorldFromRoster(info.cfg, info.roster);
     const sig = stateSignature(this.world);
     if (sig !== info.sig) this.incompatible = 'Tu versión del juego no coincide con la del servidor. Recargá la página.';
   }
@@ -142,32 +163,29 @@ export class OnlineMatch {
 
   /** Snapshot binario (estado autoritativo). */
   handleSnapshot(buf: ArrayBuffer) {
+    if (this.incompatible) return;
     const h = decodeSnapshotHeader(buf);
-    if (h.seq <= this.lastSeq && this.lastSeq !== 0) return;
-    const base = h.delta ? this.received.get(h.baseline) ?? null : null;
-    const flat = decodeSnapshotBody(buf, base);
-    if (!flat) return; // falta la línea base: esperamos un completo
-    // Pérdida estimada: huecos en la secuencia (el servidor numera todos los ticks cuantizados)
-    if (this.lastSeq) this.seqWindow.push(h.seq - this.lastSeq);
-    if (this.seqWindow.length > 120) this.seqWindow.shift();
-    this.lastSeq = h.seq;
-    this.received.set(h.seq, flat);
-    for (const k of this.received.keys()) if (k < h.seq - 200) this.received.delete(k);
-    this.ackSeq = h.seq;
-    this.slack = h.slack;
-    this.lastServerTick = h.tick;
-    this.lastServerAt = now();
-
-    if (this.flatLen >= 0 && flat.length !== this.flatLen) {
-      // Estructura distinta: no se puede aplicar sin corromper el estado
-      if (!this.incompatible) this.incompatible = 'El estado del servidor no coincide con esta versión del juego.';
+    if (h.seq <= this.lastSeq && this.lastSeq !== 0 && h.baseline !== FULL) return;
+    const flat = decodeSnapshotBody(buf, h.delta && h.baseline === this.lastSeq ? this.base : null);
+    if (!flat) {
+      // Falta la línea base (no debería pasar con TCP): pedir un estado completo
+      const t = now();
+      if (t - this.resyncAt > 500) { this.resyncAt = t; this.net.send({ t: 'resync' }); }
       return;
     }
+    const t = now();
+    this.bytesWin.push({ t, b: buf.byteLength });
+    while (this.bytesWin.length && t - this.bytesWin[0].t > 2000) this.bytesWin.shift();
+    this.lastSeq = h.seq;
+    this.base = flat;
+    this.ackSeq = h.seq;
+    this.slack = h.slack;
+    this.stats.loss = h.loss;
+    this.serverTick = h.tick;
+    this.lastServerAt = t;
 
     if (!this.ready) {
-      restoreWorld(this.world, flat);
-      this.flatLen = captureWorld(this.world).length;
-      if (flat.length !== this.flatLen) { this.incompatible = 'El estado del servidor no coincide con esta versión del juego.'; return; }
+      if (!this.tryRestore(this.world, flat)) return;
       this.history.set(h.tick, flat);
       this.ready = true;
       // Arrancamos adelantados: lo que tarda en llegar el input al servidor + margen
@@ -176,43 +194,84 @@ export class OnlineMatch {
       return;
     }
 
-    if (h.tick > this.world.tick) {
+    // Comparar contra lo predicho es barato; re-simular no. Si coincide bit a bit, no hay nada que corregir
+    // (y cualquier corrección pendiente más vieja queda obsoleta).
+    const predicted = h.tick <= this.world.tick ? this.history.get(h.tick) : undefined;
+    if (predicted) {
+      this.stats.checked++;
+      if (maxDiff(predicted, flat) === 0) {
+        this.stats.exact++;
+        this.stats.localErr = 0;
+        this.pending = null;
+        this.pruneHistory(h.tick);
+        return;
+      }
+      if (predicted.length === flat.length) {
+        // Cuánto se equivocó la predicción del auto propio (para estadísticas y pruebas)
+        const pa = this.localPos(predicted), pb = this.localPos(flat);
+        if (pa && pb) {
+          this.stats.localErr = Math.hypot(pa[0] - pb[0], pa[1] - pb[1], pa[2] - pb[2]);
+          this.stats.localErrMax = Math.max(this.stats.localErrMax, this.stats.localErr);
+        }
+      }
+    }
+    // La corrección se aplica en tick(), con la más nueva y con un tope de frecuencia según lo que cuesta
+    this.pending = { tick: h.tick, flat };
+  }
+
+  /** Aplica el último estado del servidor: rollback y re-simulación hasta el presente. */
+  private applyPending() {
+    const p = this.pending!;
+    this.pending = null;
+    const t0 = now();
+    const before = this.smoother.apply(this.world.snapshot());
+    if (p.tick > this.world.tick) {
       // El servidor va adelante nuestro (por ejemplo, después de un tirón): saltamos a su estado
-      const before = this.smoother.apply(this.world.snapshot());
-      restoreWorld(this.world, flat);
+      if (!this.tryRestore(this.world, p.flat)) return;
       this.history.clear();
-      this.history.set(h.tick, flat);
+      this.history.set(p.tick, p.flat);
       const lead = this.targetLead();
       for (let i = 0; i < lead; i++) this.stepPredicted(true);
-      this.smoother.correct(before, this.world.snapshot());
-      this.stats.rollbacks++;
-      return;
+      this.stats.resimTicks += lead;
+    } else {
+      const target = this.world.tick;
+      if (!this.tryRestore(this.world, p.flat)) return;
+      this.history.set(p.tick, p.flat);
+      let n = 0;
+      while (this.world.tick < target) { this.stepPredicted(true); n++; }
+      this.stats.resimTicks += n;
     }
-
-    const predicted = this.history.get(h.tick);
-    const diff = predicted ? maxDiff(predicted, flat) : Infinity;
-    if (diff === 0) {
-      this.pruneHistory(h.tick);
-      return;
-    }
-    // Rollback: restaurar el estado del servidor y re-simular hasta el presente
-    const target = this.world.tick;
-    const before = this.smoother.apply(this.world.snapshot());
-    restoreWorld(this.world, flat);
-    this.history.set(h.tick, flat);
-    let n = 0;
-    while (this.world.tick < target) { this.stepPredicted(true); n++; }
     const after = this.world.snapshot();
     this.smoother.correct(before, after);
     this.stats.rollbacks++;
-    this.stats.resimTicks += n;
     let maxC = 0;
     for (let i = 0; i < after.cars.length; i++) {
       const a = before.cars[i], b = after.cars[i];
       if (a && b && !a.demoed && !b.demoed) maxC = Math.max(maxC, Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z));
     }
     this.stats.maxCorrection = Math.max(this.stats.maxCorrection * 0.98, maxC);
-    this.pruneHistory(h.tick);
+    this.pruneHistory(p.tick);
+    const t1 = now();
+    this.rollbackCost = this.rollbackCost ? this.rollbackCost * 0.8 + (t1 - t0) * 0.2 : t1 - t0;
+    this.lastRollbackAt = t1;
+  }
+
+  private tryRestore(w: World, flat: Float32Array) {
+    try {
+      restoreWorld(w, flat);
+      return true;
+    } catch {
+      this.incompatible = 'El estado del servidor no coincide con esta versión del juego. Recargá la página.';
+      return false;
+    }
+  }
+
+  private localPos(flat: Float32Array): [number, number, number] | null {
+    try {
+      restoreWorld(this.scratch, flat);
+    } catch { return null; }
+    const c = this.scratch.cars[this.localId];
+    return c ? [c.pos.x, c.pos.y, c.pos.z] : null;
   }
 
   private pruneHistory(serverTick: number) {
@@ -223,13 +282,17 @@ export class OnlineMatch {
   /** Ticks que vamos adelantados al servidor: medio RTT + margen anti-jitter. */
   private targetLead() {
     const rtt = this.net.rtt || 80;
-    const jitter = Math.min(8, Math.max(2, Math.ceil((this.net.rttVar * 1.5) / (DT * 1000))));
-    return Math.ceil(rtt / 2 / (DT * 1000)) + jitter + 1;
+    return Math.ceil(rtt / 2 / (DT * 1000)) + this.wantSlack();
+  }
+
+  /** Margen (en ticks) con que queremos que lleguen nuestros inputs al servidor: el buffer de jitter. */
+  private wantSlack() {
+    return Math.min(10, Math.max(2, Math.ceil((this.net.rttVar * 1.5) / (DT * 1000)))) + 1;
   }
 
   private estimatedServerTick() {
-    if (!this.lastServerAt) return this.lastServerTick;
-    return this.lastServerTick + (now() - this.lastServerAt) / (DT * 1000);
+    if (!this.lastServerAt) return this.serverTick;
+    return this.serverTick + (now() - this.lastServerAt) / (DT * 1000);
   }
 
   /** Un paso de la simulación predicha. */
@@ -238,7 +301,9 @@ export class OnlineMatch {
     const t = w.tick + 1;
     if (local) this.inputs.set(t, local);
     const mine = this.inputs.get(t) ?? this.lastLocal;
-    const inputs = w.cars.map((c) => (c.id === this.localId ? mine : c.input));
+    // Copia: restoreWorld escribe car.input en el lugar y no debe tocar el historial de inputs.
+    // Los demás autos repiten su último input conocido (extrapolación).
+    const inputs = w.cars.map((c) => (c.id === this.localId ? { ...mine } : c.input));
     w.step(inputs);
     if (t % this.info.quantEvery === 0) this.history.set(t, quantizeWorldInPlace(w));
     const evs = w.takeEvents();
@@ -252,10 +317,11 @@ export class OnlineMatch {
   tick(localInput: CarInput, dt = DT): GameEvent[] {
     this.smoother.decay(dt);
     if (!this.ready || this.incompatible) return this.takePending();
+    if (this.pending && now() - this.lastRollbackAt >= this.rollbackCost / this.rollbackBudget) this.applyPending();
     const q = quantizeInput(localInput);
-    // Control del margen: slack = cuántos ticks antes llegan nuestros inputs al servidor
-    const want = Math.min(8, Math.max(2, Math.ceil((this.net.rttVar * 1.5) / (DT * 1000)))) + 1;
-    const err = this.slack - want;
+    // Control del margen: slack = con cuántos ticks de anticipación llegó el input más atrasado del último
+    // segundo al servidor (el servidor ya mide el jitter). Apuntamos a un margen chico pero positivo.
+    const err = this.slack - (this.stats.loss > 0.02 ? 3 : 2);
     const targetScale = Math.max(0.94, Math.min(1.06, 1 - err * 0.01));
     this.timeScale += (targetScale - this.timeScale) * 0.05;
     this.acc += this.timeScale;
@@ -276,17 +342,11 @@ export class OnlineMatch {
     // Estadísticas
     this.stats.ping = Math.round(this.net.rtt);
     this.stats.jitter = Math.round(this.net.rttVar);
-    const gaps = this.seqWindow;
-    if (gaps.length) {
-      const expected = gaps.reduce((a, g) => a + 1, 0);
-      const missing = gaps.reduce((a, g) => a + Math.max(0, g - 1), 0);
-      // Con 30 Hz por congestión el servidor saltea secuencias a propósito: no lo contamos como pérdida
-      const every = Math.round(gaps.reduce((a, g) => a + g, 0) / gaps.length);
-      this.stats.loss = every > 1 ? 0 : missing / (expected + missing);
-    }
     this.stats.slack = this.slack;
     this.stats.timeScale = this.timeScale;
     this.stats.lead = Math.round(this.world.tick - est);
+    const win = this.bytesWin;
+    if (win.length > 1) this.stats.bytesPerSec = win.reduce((a, x) => a + x.b, 0) / Math.max(0.5, (win[win.length - 1].t - win[0].t) / 1000);
     return this.takePending();
   }
 

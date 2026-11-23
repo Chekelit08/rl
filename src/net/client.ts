@@ -30,8 +30,8 @@ export class NetClient {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private wantOpen = false;
   private retries = 0;
-  private outQueueT = 0;
-  private inQueueT = 0;
+  private inQ = new DelayQueue();
+  private outQ = new DelayQueue();
   private serverTickAtPong = 0;
 
   constructor(token?: string, opts: NetClientOptions = {}) {
@@ -113,19 +113,15 @@ export class NetClient {
         this.onBinary(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength) as ArrayBuffer);
       }
     };
-    if (lat <= 0) { handle(); return; }
-    const t = Math.max(now() + lat, this.inQueueT);
-    this.inQueueT = t;
-    setTimeout(handle, t - now());
+    if (lat <= 0 && this.inQ.empty()) { handle(); return; }
+    this.inQ.push(now() + lat, handle);
   }
 
   private rawSend(data: string | ArrayBuffer) {
     const lat = this.opts.simulatedLatency?.() ?? 0;
     const go = () => { if (this.ws && this.ws.readyState === 1) this.ws.send(data); };
-    if (lat <= 0) { go(); return; }
-    const t = Math.max(now() + lat, this.outQueueT);
-    this.outQueueT = t;
-    setTimeout(go, t - now());
+    if (lat <= 0 && this.outQ.empty()) { go(); return; }
+    this.outQ.push(now() + lat, go);
   }
 
   send(m: ClientMsg) { this.rawSend(JSON.stringify(m)); }
@@ -139,6 +135,27 @@ export class NetClient {
     try { this.ws?.close(); } catch { /* ignorar */ }
     this.ws = null;
     this.setStatus('closed');
+  }
+}
+
+/** Cola FIFO con demora (latencia simulada): nunca reordena, como TCP. */
+class DelayQueue {
+  private q: { t: number; fn: () => void }[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private lastT = 0;
+  empty() { return this.q.length === 0; }
+  push(t: number, fn: () => void) {
+    this.lastT = Math.max(t, this.lastT);
+    this.q.push({ t: this.lastT, fn });
+    if (!this.timer) this.arm();
+  }
+  private arm() {
+    if (!this.q.length) { this.timer = null; return; }
+    this.timer = setTimeout(() => {
+      const n = now();
+      while (this.q.length && this.q[0].t <= n + 0.5) this.q.shift()!.fn();
+      this.arm();
+    }, Math.max(0, this.q[0].t - now()));
   }
 }
 

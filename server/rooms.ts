@@ -297,6 +297,7 @@ export class Lobby {
         case 'ready': if (room && room.state === 'lobby') { player.ready = !!m.ready; room.broadcastRoom(); } break;
         case 'config': room?.setConfig(player, m.cfg); break;
         case 'start': room?.start(player); break;
+        case 'resync': room?.match?.resync(player.id); break;
         case 'lobby': if (room) { if (room.state === 'results') room.backToLobby(); else room.broadcastRoom(); } break;
         case 'leave': {
           if (room) room.remove(player);
