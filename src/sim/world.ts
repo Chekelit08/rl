@@ -8,6 +8,7 @@ import {
   ARENA, BALL, BIG_PADS, CAR, CAR_BODIES, DT, KICKOFF_SPAWNS, PAD, RESPAWNS, SMALL_PADS,
 } from './constants.ts';
 import { rng, V3 } from './math.ts';
+import { classifyTouch, EPIC_SAVE_BONUS, FEAT_POINTS, isEpicSave, type TouchFeat } from './touchEvents.ts';
 
 export type Phase = 'countdown' | 'playing' | 'goal' | 'ended';
 
@@ -33,7 +34,8 @@ export type GameEvent =
   | { type: 'flipreset'; carId: number }
   | { type: 'countdown'; n: number }
   | { type: 'kickoff' }
-  | { type: 'save'; carId: number }
+  | { type: 'save'; carId: number; epic?: boolean }
+  | { type: 'feat'; carId: number; feat: TouchFeat; points: number }
   | { type: 'shot'; carId: number }
   | { type: 'overtime' }
   | { type: 'end'; winner: number };
@@ -67,6 +69,8 @@ export class World {
   lastTouches: { carId: number; team: number; tick: number }[] = [];
   lastGoal: { team: number; scorerId: number; tick: number } | null = null;
   winner = -1;
+  /** ¿Alguien tocó la pelota desde el último saque? (para "Primer toque"). */
+  kickoffTouched = false;
   private rand: () => number;
   private lastCountdown = 4;
 
@@ -110,6 +114,7 @@ export class World {
       });
     }
     this.lastTouches = [];
+    this.kickoffTouched = false;
     if (this.cfg.mode === 'match') {
       this.phase = 'countdown';
       this.phaseTimer = 3;
@@ -269,11 +274,18 @@ export class World {
       const before = this.ballWouldScore(preVel);
       const after = this.ballWouldScore(this.ball.vel);
       const ownGoalOwner = c.team; // arco propio
-      if (before === ownGoalOwner && after !== ownGoalOwner && this.cfg.mode === 'match') {
+      const isSave = before === ownGoalOwner && after !== ownGoalOwner && this.cfg.mode === 'match';
+      if (isSave) {
+        const epic = isEpicSave(c, this.ball.pos, preVel);
         c.stats.saves++;
-        c.stats.score += 50;
-        this.events.push({ type: 'save', carId: c.id });
+        c.stats.score += 50 + (epic ? EPIC_SAVE_BONUS : 0);
+        this.events.push({ type: 'save', carId: c.id, epic });
       }
+      for (const feat of classifyTouch(c, this.ball.pos, preVel, this.ball.vel, this.tick, this.kickoffTouched, isSave, this.cfg.mode === 'match')) {
+        c.stats.score += FEAT_POINTS[feat];
+        this.events.push({ type: 'feat', carId: c.id, feat, points: FEAT_POINTS[feat] });
+      }
+      this.kickoffTouched = true;
       if (after === 1 - c.team && before !== 1 - c.team) {
         c.stats.shots++;
         c.stats.score += 20;

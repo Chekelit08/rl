@@ -15,6 +15,8 @@ import type { GameEvent, Snapshot } from '../sim/world.ts';
 import { buildArenaSurface, buildFloor, buildGoals, wallMaterial } from './arenaMesh.ts';
 import { CameraController, type CameraSettings } from './camera.ts';
 import { buildCar, type CarVisual } from './carMesh.ts';
+import { applyFlameColors, type CosmeticsHooks } from '../garage/fxRender.ts';
+import type { CarLook } from '../garage/loadout.ts';
 import { BallVisual, buildPads, ContactShadows, Particles, SkidMarks, type PadVisual } from './effects.ts';
 import { BOOST_COLOR, TEAM_COLORS, TEAM_COLORS_LIGHT } from './palette.ts';
 import { buildDaySky, buildNightSky, Stadium, type Theme } from './stadium.ts';
@@ -39,7 +41,7 @@ const GradeShader = {
     }`,
 };
 
-export interface CarInfo { id: number; team: number; bodyIndex: number; name: string }
+export interface CarInfo { id: number; team: number; bodyIndex: number; name: string; look?: CarLook }
 
 export class GameRenderer {
   renderer: THREE.WebGLRenderer;
@@ -71,6 +73,8 @@ export class GameRenderer {
   private flash: THREE.PointLight;
   localId = -1;
   quality: 'alta' | 'baja' = 'alta';
+  /** Estelas y explosiones personalizadas (garage). */
+  cosmetics: CosmeticsHooks | null = null;
 
   constructor(container: HTMLElement, camSettings: CameraSettings, theme: Theme = 'dia') {
     this.theme = theme;
@@ -300,7 +304,8 @@ export class GameRenderer {
     this.cars.clear();
     this.localId = localId;
     for (const c of cars) {
-      const v = buildCar(CAR_BODIES[c.bodyIndex % CAR_BODIES.length], c.team);
+      const v = buildCar(CAR_BODIES[c.bodyIndex % CAR_BODIES.length], c.team, c.look);
+      applyFlameColors(v, c.team);
       this.scene.add(v.group);
       const np = document.createElement('div');
       np.className = 'nameplate team' + c.team;
@@ -317,11 +322,13 @@ export class GameRenderer {
         const tc = new THREE.Color(TEAM_COLORS[ev.team]);
         const tl = new THREE.Color(TEAM_COLORS_LIGHT[ev.team]);
         const white = new THREE.Color('#ffffff');
-        this.particles.burst(p, 900, 2600, [tc, tl, white], 70, 1.8, -500);
-        this.particles.burst(p, 300, 900, [white, new THREE.Color(BOOST_COLOR)], 120, 1.2, 0);
-        this.flash.position.copy(p);
-        this.flash.color.copy(tc);
-        this.flash.intensity = 40;
+        if (!this.cosmetics?.goal(p, ev.team, this.cars.get(ev.scorerId)?.look)) {
+          this.particles.burst(p, 900, 2600, [tc, tl, white], 70, 1.8, -500);
+          this.particles.burst(p, 300, 900, [white, new THREE.Color(BOOST_COLOR)], 120, 1.2, 0);
+          this.flash.position.copy(p);
+          this.flash.color.copy(tc);
+          this.flash.intensity = 40;
+        }
         this.camCtl.shake(60);
         this.stadium.cheer(1);
         break;
@@ -438,6 +445,7 @@ export class GameRenderer {
         v.flame.scale.set(f, 1, 1);
         const rear = v.rearOffset.clone().applyQuaternion(q).add(v.group.position);
         const back = fwd.clone().multiplyScalar(-1);
+        if (!this.cosmetics?.boost(v, v.team, rear, back, new THREE.Vector3(cs.vx, cs.vy, cs.vz), dt)) {
         for (let i = 0; i < 3; i++) {
           const sp = 400 + Math.random() * 300;
           const col = new THREE.Color(i === 0 ? BOOST_COLOR : TEAM_COLORS_LIGHT[v.team]);
@@ -450,6 +458,7 @@ export class GameRenderer {
         this.smoke.spawn(rear.x + back.x * 70, rear.y + back.y * 70, rear.z + back.z * 70,
           cs.vx * 0.15 + (Math.random() - 0.5) * 60, cs.vy * 0.15 + (Math.random() - 0.5) * 60, cs.vz * 0.15 + 40,
           new THREE.Color(gray, gray, gray * 1.02), 55, 0.9, 30, 1.5);
+        }
       }
       if (cs.supersonic) {
         const back = fwd.clone().multiplyScalar(-70);
@@ -479,6 +488,7 @@ export class GameRenderer {
       }
     });
 
+    this.cosmetics?.update(dt);
     this.particles.update(dt);
     this.smoke.update(dt);
 
