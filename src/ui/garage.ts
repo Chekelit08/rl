@@ -35,8 +35,8 @@ export class Garage {
   private smoke = new Particles({ additive: false, grow: 3.5 });
   private fx: CosmeticFx;
   private az = 0.9;
-  private el_ = 0.2;
-  private dist = 330;
+  private el_ = 0.3;
+  private dist = 400;
   private spin = 0;
   private dragging = false;
   private turbo = false;
@@ -69,21 +69,22 @@ export class Garage {
     const bg = new THREE.CanvasTexture(cv); bg.colorSpace = THREE.SRGBColorSpace;
     s.background = bg;
     s.add(new THREE.AmbientLight('#8aa4d6', 0.55));
-    const key = new THREE.DirectionalLight('#ffffff', 2.4); key.position.set(300, -260, 380); s.add(key);
-    const rim = new THREE.DirectionalLight('#5b9cff', 1.6); rim.position.set(-320, 280, 160); s.add(rim);
-    const warm = new THREE.PointLight('#ffb067', 2.2e5, 1200, 2); warm.position.set(-200, -240, 120); s.add(warm);
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(210, 220, 8, 64), new THREE.MeshStandardMaterial({ color: '#10161f', metalness: 0.7, roughness: 0.35 }));
+    const key = new THREE.DirectionalLight('#ffffff', 0.9); key.position.set(300, -260, 380); s.add(key);
+    const rim = new THREE.DirectionalLight('#5b9cff', 1.2); rim.position.set(-320, 280, 160); s.add(rim);
+    const warm = new THREE.PointLight('#ffb067', 0, 1200, 2); warm.position.set(-200, -240, 120); s.add(warm);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(210, 220, 8, 64), new THREE.MeshStandardMaterial({ color: '#1a2436', metalness: 0.4, roughness: 0.55 }));
     disc.rotation.x = Math.PI / 2;
     this.platform.add(disc);
     this.ring = new THREE.Mesh(new THREE.TorusGeometry(214, 2.6, 8, 96), new THREE.MeshBasicMaterial({ color: TEAM_COLORS[0] }));
     this.ring.position.z = 4;
     this.platform.add(this.ring);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(2400, 48), new THREE.MeshStandardMaterial({ color: '#060a12', metalness: 0.5, roughness: 0.6 }));
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(2400, 48), new THREE.MeshStandardMaterial({ color: '#0b1222', metalness: 0.2, roughness: 0.85 }));
     floor.position.z = -6;
     this.platform.add(floor);
     s.add(this.platform);
     s.environment = this.renderer.scene.environment;
-    s.environmentIntensity = 0.9;
+    s.environmentIntensity = 0.6;
+    s.fog = new THREE.Fog('#070d1a', 900, 2600);
   }
 
   private wire() {
@@ -108,8 +109,11 @@ export class Garage {
   }
 
   private resize() {
-    const w = this.view.clientWidth || window.innerWidth, h = this.view.clientHeight || window.innerHeight;
+    const w = window.innerWidth, h = window.innerHeight;
     this.camera.aspect = w / h;
+    // Corre la imagen a la derecha para que el auto quede en la zona libre del panel
+    const shift = w > 720 ? Math.min(440, w) / 2 : 0;
+    this.camera.setViewOffset(w, h, -shift, 0, w, h);
     this.camera.updateProjectionMatrix();
   }
 

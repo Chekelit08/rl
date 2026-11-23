@@ -32,6 +32,7 @@ export class UiManager {
   points: PointsFeed;
   chat: QuickChat;
   current: ScreenName | null = null;
+  private escAt = -1e9;
 
   constructor(private host: UiHost, hud: HTMLElement) {
     this.garage = new Garage(host.renderer);
@@ -44,8 +45,15 @@ export class UiManager {
       if ((e.target as HTMLElement).closest('[data-ui="back"]')) this.back();
     });
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape' && this.current && !host.input.capturing) { e.preventDefault(); this.back(); }
+      if (e.code === 'Escape' && this.current && !host.input.capturing) { e.preventDefault(); this.escAt = performance.now(); this.back(); }
     });
+  }
+
+  /** true si este Esc ya cerró una pantalla de W5 (para que main no lo tome también como pausa). */
+  consumeEsc(): boolean {
+    const v = performance.now() - this.escAt < 600;
+    this.escAt = -1e9;
+    return v;
   }
 
   private screens(): Record<ScreenName, { el: HTMLElement; render?: () => void }> {

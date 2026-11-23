@@ -515,6 +515,7 @@ class Game {
 
   private handleUi(ui: ReturnType<InputManager['poll']>['ui']) {
     this.tabHeld = ui.scoreboard;
+    if (ui.pause && this.ui.consumeEsc()) ui.pause = false;
     if (ui.scoreboard) $('scoreTableInner').innerHTML = `<h2>Puntajes</h2>${this.statsTable()}`;
     if (ui.chat >= 0 && this.state === 'playing' && this.world.cfg.mode === 'match') this.ui.chat.press(ui.chat);
     this.ui.chat.tick();
