@@ -47,4 +47,11 @@ Para agregar un recorrido: sumar una entrada a `COURSES` con la salida, el radio
 - **Bumps y demoliciones:** se decidían con la velocidad que quedaba *después* del impulso físico del choque, así que un golpe de frente a un rival quieto o lento nunca contaba (ni bump ni demolición). Ahora se usan las velocidades previas al choque.
 - **Giro a máxima velocidad:** el último punto de la curva de curvatura estaba en 2500 uu/s; el valor de referencia es 2300 (0,00088).
 
+- **Auto trabado en la rampa:** el enderezado automático sólo funcionaba sobre superficies casi horizontales y medía el vuelco contra el "arriba" del mundo. Un auto caído de costado o panza arriba sobre la rampa de la pared (o al pie de ella) no se enderezaba y no se podía mover. Ahora se endereza respecto de la superficie que toca, con acelerador o turbo, en piso, rampa y pared. Barrido de 5.670 caídas: 571 trabadas antes, 0 después.
+
+## Controles y cámara
+
+- **Espacio** alterna la cámara (auto ↔ pelota). Saltar pasa a **clic derecho** o **J**. Los controles guardados con el esquema anterior se migran solos; todo sigue siendo reasignable.
+- La cámara de auto acompaña la trompa al subir por rampas y paredes (55 % de la inclinación), para que el auto no se vaya de cuadro.
+
 Pruebas: `npm run test:rules`.

@@ -33,6 +33,8 @@ export class CameraController {
   private look = new THREE.Vector3(0, 1, 0);
   private shakeAmt = 0;
   private initialized = false;
+  /** Inclinación de la cámara de auto cuando se maneja por rampas y paredes. */
+  private wallPitch = 0;
 
   constructor(cam: THREE.PerspectiveCamera, settings: CameraSettings) {
     this.cam = cam;
@@ -77,8 +79,17 @@ export class CameraController {
     this.yaw = wrap(this.yaw + wrap(targetYaw - this.yaw) * swivelRate);
 
     const yaw = this.yaw + lookX * Math.PI;
-    const dir = new THREE.Vector3(Math.cos(yaw), Math.sin(yaw), 0);
-    const desired = cp.clone().addScaledVector(dir, -s.distance).add(new THREE.Vector3(0, 0, s.height));
+    // En paredes y rampas la cámara de auto acompaña la trompa (si no, el auto se va de cuadro al subir).
+    // Con cámara de pelota o en el aire vuelve a quedar horizontal.
+    const climb = car.onGround ? Math.asin(Math.max(-1, Math.min(1, fwd.z))) * 0.55 : 0;
+    const pitchTarget = climb * (1 - this.blend) * (lookX ? 0 : 1);
+    if (!this.initialized) this.wallPitch = pitchTarget;
+    this.wallPitch += (pitchTarget - this.wallPitch) * (1 - Math.exp(-dt * 5));
+    const cw = Math.cos(this.wallPitch), sw = Math.sin(this.wallPitch);
+    const dir = new THREE.Vector3(Math.cos(yaw) * cw, Math.sin(yaw) * cw, sw);
+    // La "altura" se aplica perpendicular a la dirección de cámara
+    const upDir = new THREE.Vector3(-Math.cos(yaw) * sw, -Math.sin(yaw) * sw, cw);
+    const desired = cp.clone().addScaledVector(dir, -s.distance).addScaledVector(upDir, s.height);
     if (lookY) desired.z += lookY * 180;
 
     const rate = 6 + s.stiffness * 40;
@@ -92,14 +103,14 @@ export class CameraController {
     }
 
     // Hacia dónde mira
-    const a = (s.angle * Math.PI) / 180;
+    const a = (s.angle * Math.PI) / 180 + this.wallPitch;
     const carLook = new THREE.Vector3(Math.cos(yaw) * Math.cos(a), Math.sin(yaw) * Math.cos(a), Math.sin(a));
     const ballLook = new THREE.Vector3(ball.x, ball.y, ball.z).sub(this.pos).normalize();
     const pitch = Math.max(-0.45, Math.min(0.95, Math.asin(Math.max(-1, Math.min(1, ballLook.z)))));
     const bh = Math.hypot(ballLook.x, ballLook.y) || 1;
     ballLook.set((ballLook.x / bh) * Math.cos(pitch), (ballLook.y / bh) * Math.cos(pitch), Math.sin(pitch));
     // La pelota pesa un poco menos que el auto en el encuadre vertical para que el auto no salga de pantalla
-    ballLook.z = ballLook.z * 0.85 + Math.sin(a) * 0.15;
+    ballLook.z = ballLook.z * 0.85 + Math.sin((s.angle * Math.PI) / 180) * 0.15;
     const lookDir = carLook.clone().lerp(ballLook, lookX ? 0 : this.blend).normalize();
     this.look.lerp(lookDir, 1 - Math.exp(-dt * 14)).normalize();
 

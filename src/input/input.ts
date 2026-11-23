@@ -45,8 +45,8 @@ export interface ControlSettings {
 export const DEFAULT_CONTROLS: ControlSettings = {
   keys: {
     forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-    jump: ['Space', 'Mouse2'], boost: ['Mouse0', 'KeyK'], handbrake: ['ShiftLeft', 'KeyL'], rollLeft: ['KeyQ'], rollRight: ['KeyE'],
-    ballCam: ['KeyC', 'Mouse1'], reset: ['KeyR'], scoreboard: ['Tab'], pause: ['Escape', 'KeyP'], saveClip: ['KeyG'],
+    jump: ['Mouse2', 'KeyJ'], boost: ['Mouse0', 'KeyK'], handbrake: ['ShiftLeft', 'KeyL'], rollLeft: ['KeyQ'], rollRight: ['KeyE'],
+    ballCam: ['Space', 'KeyC'], reset: ['KeyR'], scoreboard: ['Tab'], pause: ['Escape', 'KeyP'], saveClip: ['KeyG'],
     chat1: ['Digit1'], chat2: ['Digit2'], chat3: ['Digit3'], chat4: ['Digit4'],
   },
   pad: { jump: 0, boost: 1, handbrake: 2, ballCam: 3, rollLeft: 4, rollRight: 5, scoreboard: 8, pause: 9, reset: 10, saveClip: 11 },
@@ -63,6 +63,13 @@ export function getControls(): ControlSettings {
     const j = JSON.parse(localStorage.getItem(CKEY) ?? 'null');
     if (j) {
       for (const a of ACTIONS) if (Array.isArray(j.keys?.[a])) c.keys[a] = j.keys[a].filter((x: unknown) => typeof x === 'string').slice(0, 2);
+      // v2: el Espacio pasó de saltar a alternar la cámara (auto ↔ pelota). Se migra lo guardado con el esquema anterior.
+      if (j.v !== 2) {
+        c.keys.jump = c.keys.jump.filter((k) => k !== 'Space');
+        if (!c.keys.jump.length) c.keys.jump = [...DEFAULT_CONTROLS.keys.jump];
+        else if (c.keys.jump.length < 2 && !c.keys.jump.includes('KeyJ')) c.keys.jump.push('KeyJ');
+        c.keys.ballCam = ['Space', ...c.keys.ballCam.filter((k) => k !== 'Space')].slice(0, 2);
+      }
       for (const a of PAD_ACTIONS) if (typeof j.pad?.[a] === 'number') c.pad[a] = j.pad[a];
       if (typeof j.steerSens === 'number') c.steerSens = Math.max(0.5, Math.min(2, j.steerSens));
       if (typeof j.airSens === 'number') c.airSens = Math.max(0.5, Math.min(2, j.airSens));
@@ -76,7 +83,7 @@ export function getControls(): ControlSettings {
 }
 
 export function saveControls() {
-  try { localStorage.setItem(CKEY, JSON.stringify(getControls())); } catch { /* ignorar */ }
+  try { localStorage.setItem(CKEY, JSON.stringify({ ...getControls(), v: 2 })); } catch { /* ignorar */ }
 }
 
 export function resetControls() {

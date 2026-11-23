@@ -427,12 +427,26 @@ function updateAutoFlip(c: Car, jumpPressed: boolean, dt: number) {
 
 /** Si el auto quedó de costado apoyado y se acelera, rueda hacia la posición correcta. */
 function updateAutoRoll(c: Car, inp: CarInput, dt: number) {
-  if (c.onGround || c.isAutoFlipping || c.worldContactTimer <= 0 || inp.throttle === 0) return;
-  if (c.worldContactNormal.z < 0.7) return;
-  const roll = c.rollAngle();
-  if (Math.abs(roll) < 0.3) return;
-  c.ang.addScaledIn(c.forward(), -sign(roll) * 12 * dt);
-  c.vel.addScaledIn(c.worldContactNormal, -100 * dt);
+  if (c.onGround || c.isAutoFlipping || c.worldContactTimer <= 0) return;
+  if (inp.throttle === 0 && !inp.boost) return;
+  // Enderezar respecto de la superficie que estamos tocando (piso, rampa o pared), no del "arriba" del mundo:
+  // si no, un auto caído de costado sobre la rampa de la pared no se endereza nunca y queda trabado.
+  const n = c.worldContactNormal;
+  if (n.z < -0.3) return; // techo: ahí no se apoya nadie
+  const up = c.up();
+  const align = up.dot(n);
+  if (align > 0.95) return;
+  const axis = up.cross(n);
+  const fwd = c.forward(), left = c.left();
+  let r = axis.dot(fwd), p = axis.dot(left);
+  // Panza arriba exacta: el eje es nulo, elegimos girar sobre el eje largo
+  // (siempre hacia el mismo lado salvo que ya esté claramente volcado hacia el otro)
+  if (align < -0.8) { r = r < -0.12 ? -1 : 1; p = 0; }
+  const k = align < 0 ? 26 : 18;
+  c.ang.addScaledIn(fwd, clamp(r * 2.5, -1, 1) * k * dt);
+  c.ang.addScaledIn(left, clamp(p * 2.5, -1, 1) * k * 0.6 * dt);
+  // Un empujoncito hacia afuera para que el hitbox tenga lugar para girar, y adherencia cuando ya casi está
+  c.vel.addScaledIn(n, (align < 0.5 ? 260 : -160) * dt);
 }
 
 /** Mantiene el auto pegado a la superficie (piso, rampas, paredes) o lo despega. */

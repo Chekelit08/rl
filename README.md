@@ -51,11 +51,11 @@ Build de producción: `npm run build` (sale en `dist/`, es estático y se puede 
 | Acelerar / reversa | W / S | RT / LT |
 | Dirección · yaw | A / D | Stick izq. |
 | Pitch en el aire | W / S | Stick izq. ↑↓ |
-| Saltar / flip | Espacio · clic der. | A |
+| Saltar / flip | Clic der. · J | A |
 | Turbo | Clic izq. · K | B |
 | Derrape + air roll | Shift izq. | X |
 | Air roll izq./der. | Q / E | LB / RB |
-| Cámara de pelota | C · rueda | Y |
+| Cámara: auto ↔ pelota | Espacio · C · rueda | Y |
 | Reiniciar (libre) | R | D-pad ↑ |
 | Puntajes / Pausa | Tab / Esc | View / Menu |
 

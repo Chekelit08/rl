@@ -3,9 +3,9 @@
 
 import { arenaDistance } from '../src/sim/arena.ts';
 import { Ball, stepBall } from '../src/sim/ball.ts';
-import { emptyInput, type CarInput } from '../src/sim/car.ts';
-import { DT } from '../src/sim/constants.ts';
-import { V3 } from '../src/sim/math.ts';
+import { Car, emptyInput, stepCar, type CarInput } from '../src/sim/car.ts';
+import { CAR_BODIES, DT } from '../src/sim/constants.ts';
+import { Quat, V3 } from '../src/sim/math.ts';
 import { applyRules, DEFAULT_RULES, makeRules, MUTATORS, RULES, type Rules } from '../src/sim/rules.ts';
 import { World } from '../src/sim/world.ts';
 import { buildGates, ChallengeRun, COURSES, medalFor } from '../src/challenges/courses.ts';
@@ -172,6 +172,23 @@ for (const id of ['slalom', 'pared']) {
     if (i - lastProgress > 120 * 12) { run.respawn(car); respawns++; lastProgress = i; }
   }
   check(`Piloto automático completa "${c.name}"`, run.finished, `${run.time.toFixed(1)} s · ${respawns} reapariciones · bronce ${c.medals[2]} s`);
+}
+
+// ---------- Auto volcado: se endereza solo en piso, rampa y pared ----------
+{
+  applyRules(makeRules());
+  let stuck = 0, total = 0;
+  for (const body of [0, 1, 5]) for (const x of [0, 3700, 3850, 3950, 4020]) for (let yaw = 0; yaw < 6.28; yaw += 1.4) for (const roll of [-1.57, 0.8, 1.57, 2.5, 3.14]) for (const pitch of [-0.6, 0.6]) {
+    const c = new Car(0, 0, 't', CAR_BODIES[body]);
+    c.placeAt(x, 500, yaw);
+    c.pos.z = 160; c.onGround = false; c.q = Quat.fromYPR(yaw, pitch, roll); c.vel.set(300, 0, -100);
+    for (let i = 0; i < 120 * 4; i++) stepCar(c, emptyInput(), DT);
+    const p0 = c.pos.clone();
+    for (let i = 0; i < 120 * 4; i++) stepCar(c, { ...emptyInput(), throttle: 1 }, DT);
+    total++;
+    if (c.pos.dist(p0) < 300) stuck++;
+  }
+  check('Auto volcado en piso, rampa o pared: acelerar lo saca', stuck === 0, `${stuck} trabados de ${total} caídas`);
 }
 
 applyRules(makeRules());
