@@ -1,0 +1,34 @@
+/* Desafíos y mutadores */
+.ch-intro { color: var(--muted); margin: -8px 0 16px; font-size: 15px; }
+.ch-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.ch-card { pointer-events: auto; display: grid; gap: 5px; text-align: left; font-family: var(--text); color: var(--ink); background: rgba(20,32,56,.9); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: transform .12s ease, border-color .12s; }
+.ch-card:hover, .ch-card:focus-visible { transform: translateY(-2px); border-color: rgba(140,180,255,.6); outline: none; }
+.ch-card b { font-family: var(--display); font-size: 21px; letter-spacing: .5px; }
+.ch-card small { color: var(--muted); font-size: 14px; line-height: 1.35; }
+.ch-kind { justify-self: start; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; background: rgba(56,168,255,.22); color: #9fd2ff; }
+.ch-kind.k-slalom { background: rgba(255,194,26,.2); color: #ffd870; }
+.ch-kind.k-pared { background: rgba(255,90,120,.2); color: #ffa3b5; }
+.ch-meta { font-size: 13px; color: var(--muted); }
+.ch-best { font-weight: 800; font-size: 15px; }
+.challenge .scoreboard, .challenge #camChip { display: none; }
+.ch-hud { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; align-items: baseline; background: rgba(4,8,16,.72); border: 1px solid var(--line); border-radius: 10px; padding: 7px 18px; font-weight: 700; white-space: nowrap; }
+.ch-hud .ch-name { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+.ch-hud .ch-count { font-family: var(--display); font-size: 24px; color: #ffc21a; }
+.ch-hud .ch-count small { font-size: 15px; color: var(--muted); }
+.ch-hud .ch-clock { font-family: var(--display); font-size: 26px; font-variant-numeric: tabular-nums; min-width: 96px; text-align: center; }
+.ch-hud .ch-pb { color: var(--muted); font-size: 14px; }
+.ch-time { font-family: var(--display); font-size: 64px; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.ch-medal { text-align: center; font-weight: 800; font-size: 20px; margin: 8px 0 16px; }
+.ch-medal.m3 { color: #ffd24a; } .ch-medal.m2 { color: #cfd8e6; } .ch-medal.m1 { color: #e0975a; } .ch-medal.m0 { color: var(--muted); }
+.ch-table { width: 100%; border-collapse: collapse; }
+.ch-table td { padding: 6px 4px; border-top: 1px solid var(--line); }
+.ch-table td:last-child { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mutators { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 6px; }
+.mutators summary { pointer-events: auto; cursor: pointer; font-weight: 800; font-size: 16px; }
+.mutators summary span { color: #ffc21a; font-weight: 700; margin-left: 6px; }
+.mutators #mutRows { margin-top: 14px; }
+.mutators .row { grid-template-columns: 150px 1fr; margin-bottom: 10px; }
+.mutators .seg button { font-size: 14px; padding: 6px 10px; }
+.mut-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.btn.small { font-size: 13px; padding: 8px 12px; }
+@media (max-width: 720px) { .ch-list { grid-template-columns: 1fr; } }

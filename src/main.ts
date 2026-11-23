@@ -20,6 +20,8 @@ import { CAR_BODIES, DT, TEAM_NAMES } from './sim/constants.ts';
 import { Quat } from './sim/math.ts';
 import { Extras } from './training/extras.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
+import { DEFAULT_RULES, isDefaultRules, makeRules, MUTATORS, type Rules } from './sim/rules.ts';
+import { Challenges } from './challenges/challenges.ts';
 
 // ---------- Ajustes persistentes ----------
 interface Settings { camera: CameraSettings; volume: number; quality: QualityLevel; replays: boolean; bodyIndex: number; theme: Theme; mix: MixSettings }
@@ -95,6 +97,12 @@ class Game {
   private screenClock = '';
   private setupMode: 'match' | 'freeplay' = 'match';
   private setupValues = { teamSize: 1, difficulty: 1, duration: 300, unlimited: 0 };
+  /** Mutadores elegidos en la pantalla de configuración. */
+  private mutators: Rules = makeRules();
+  private gameSpeed = 1;
+  /** Velocidad de simulación del partido en curso (mutador). */
+  private simSpeed = 1;
+  challenges!: Challenges;
   private returnTo: 'menu' | 'pause' = 'menu';
   ui!: UiManager;
   /** Partida competitiva en curso (contra bots, con rango). */
@@ -117,6 +125,7 @@ class Game {
     // Mundo de fondo para el menú (bots jugando)
     this.startWorld({ mode: 'match', teamSize: 2, duration: 300, unlimitedBoost: false, seed: 7 }, 1, true);
     this.wireMenus();
+    this.buildMutators();
     this.renderer.cosmetics = new CosmeticFx(this.renderer.scene, this.renderer.particles, this.renderer.smoke);
     this.ui = new UiManager({
       showMain: (id) => this.showOnly(id),
@@ -129,12 +138,21 @@ class Game {
       renderer: this.renderer, audio: this.audio, bodyIndex: () => getLoadout().body,
       showOnly: (id) => this.showOnly(id), toMenu: () => this.quit(),
     });
+    this.challenges = new Challenges({
+      renderer: this.renderer,
+      start: (cfg) => { this.audio.start(); this.ext.quietNext(); this.ranked = null; this.startWorld(cfg, 1); this.showOnly(null); $('hud').classList.remove('hidden'); this.state = 'playing'; },
+      showOnly: (id) => this.showOnly(id),
+      toast: (t) => this.toast(t),
+      setHint: (t) => { $('hint').textContent = t; },
+    });
     $('loading').classList.add('hidden');
     requestAnimationFrame((t) => this.frame(t));
   }
 
   // ---------- Partidas ----------
   startWorld(cfg: MatchConfig, difficulty: Difficulty, attract = false, botDiffs?: number[]) {
+    this.simSpeed = 1;
+    this.challenges?.stop();
     this.world = new World(cfg);
     this.bots.clear();
     const names: string[] = [];
@@ -193,14 +211,18 @@ class Game {
       duration: v.duration,
       unlimitedBoost: mode === 'freeplay' ? v.unlimited === 1 : false,
       seed: Math.floor(Math.random() * 1e9),
+      rules: isDefaultRules(this.mutators) ? undefined : { ...this.mutators },
     };
     this.audio.start();
     this.startWorld(cfg, v.difficulty as Difficulty);
+    this.simSpeed = this.gameSpeed;
+    const muts = this.mutatorSummary();
     this.showOnly(null);
     $('hud').classList.remove('hidden');
     $('hint').textContent = mode === 'freeplay'
       ? 'R: reiniciar · C: cámara · F1: controles · Esc: menú'
       : `${v.teamSize}v${v.teamSize} · ${DIFFICULTY_NAMES[v.difficulty]} · Tab: puntajes · Esc: pausa`;
+    if (muts) this.toast(`Mutadores: ${muts}`);
     this.state = 'playing';
   }
 
@@ -224,6 +246,7 @@ class Game {
 
   restart() {
     if (this.ext.restart()) return;
+    if (this.challenges.restart()) { this.showOnly(null); this.state = 'playing'; return; }
     if (!this.lastCfg) return;
     if (this.ranked) this.ranked.diffs = this.rankedDiffs(this.ranked.playlist);
     this.startWorld({ ...this.lastCfg, seed: Math.floor(Math.random() * 1e9) }, this.lastDifficulty, false, this.ranked?.diffs);
@@ -262,7 +285,7 @@ class Game {
     } else if (this.state === 'replay' && this.replay) {
       this.stepReplay(dt, ui.skip);
     } else if (this.state === 'playing' || this.state === 'menu' || this.state === 'ended') {
-      this.acc += dt;
+      this.acc += dt * (this.state === 'playing' ? this.simSpeed : 1);
       let steps = 0;
       while (this.acc >= DT && steps < 12) {
         this.tick();
@@ -278,6 +301,7 @@ class Game {
     }
 
     if (this.state !== 'ext') this.updateHud(dt);
+    this.challenges.frame(dt);
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -297,6 +321,7 @@ class Game {
     if (this.history.length > 120 * 9) this.history.shift();
     for (const ev of w.takeEvents()) this.onEvent(ev);
     this.ext.afterStep(this.curSnap);
+    if (this.state === 'playing') this.challenges.afterStep(w);
 
     // Transiciones del partido
     if (w.cfg.mode === 'match' && w.phase === 'goal' && w.phaseTimer <= 0) {
@@ -539,7 +564,9 @@ class Game {
       this.returnTo = 'pause';
       this.showOnly('controls');
     }
-    if (ui.reset && this.state === 'playing' && this.world.cfg.mode === 'freeplay') {
+    if (ui.reset && this.state === 'playing' && this.challenges.onReset()) {
+      this.renderer.camCtl.snapTo();
+    } else if (ui.reset && this.state === 'playing' && this.world.cfg.mode === 'freeplay') {
       this.world.resetFreeplay(this.world.cars[0]);
       this.renderer.camCtl.snapTo();
     }
@@ -548,6 +575,7 @@ class Game {
   // ---------- Menús ----------
   private showOnly(id: string | null) {
     this.ui?.closeAll();
+    this.challenges?.closeMenu();
     for (const o of ['menu', 'setup', 'settings', 'controls', 'pause', 'end']) $(o).classList.toggle('hidden', o !== id);
   }
 
@@ -573,6 +601,9 @@ class Game {
         case 'resetSettings': this.settings = structuredClone(DEFAULTS); this.applySettings(); this.buildSliders(); break;
         case 'back': this.showOnly('menu'); break;
         case 'play': this.play(this.setupMode); break;
+        case 'challenges': this.challenges.openMenu(); break;
+        case 'mutReset': this.mutators = makeRules(); this.gameSpeed = 1; this.buildMutators(); break;
+        case 'mutRandom': this.randomMutators(); break;
         case 'garage': this.ui.open('garage'); break;
         case 'ranked': this.ui.open('ranked'); break;
         case 'profile': this.ui.open('profile'); break;
@@ -605,6 +636,45 @@ class Game {
       });
       bodies.appendChild(el);
     });
+  }
+
+  // ---------- Mutadores ----------
+  private static readonly SPEEDS: [string, number][] = [['Lenta', 0.75], ['Normal', 1], ['Rápida', 1.25]];
+
+  private mutatorSummary(): string {
+    const parts: string[] = [];
+    for (const m of MUTATORS) {
+      const v = this.mutators[m.key];
+      if (v !== DEFAULT_RULES[m.key]) parts.push(`${m.label}: ${m.options.find((o) => o.value === v)?.label ?? v}`);
+    }
+    if (this.gameSpeed !== 1) parts.push(`Velocidad: ${Game.SPEEDS.find((s) => s[1] === this.gameSpeed)?.[0]}`);
+    return parts.join(' · ');
+  }
+
+  private buildMutators() {
+    const box = $('mutRows');
+    box.innerHTML = '';
+    const row = (label: string, opts: string[], current: number, pick: (i: number) => void) => {
+      const r = document.createElement('div');
+      r.className = 'row';
+      r.innerHTML = `<label>${label}</label><div class="seg mut">${opts.map((o, i) => `<button class="${i === current ? 'on' : ''}">${o}</button>`).join('')}</div>`;
+      r.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => { pick(i); this.buildMutators(); }));
+      box.appendChild(r);
+    };
+    for (const m of MUTATORS) {
+      const cur = m.options.findIndex((o) => o.value === this.mutators[m.key]);
+      row(m.label, m.options.map((o) => o.label), cur, (i) => { (this.mutators as unknown as Record<string, unknown>)[m.key] = m.options[i].value; });
+    }
+    row('Velocidad del juego', Game.SPEEDS.map((s) => s[0]), Game.SPEEDS.findIndex((s) => s[1] === this.gameSpeed), (i) => { this.gameSpeed = Game.SPEEDS[i][1]; });
+    const n = this.mutatorSummary() ? this.mutatorSummary().split(' · ').length : 0;
+    $('mutCount').textContent = n ? `(${n} activo${n > 1 ? 's' : ''})` : '';
+  }
+
+  private randomMutators() {
+    this.mutators = makeRules();
+    const pool = [...MUTATORS].sort(() => Math.random() - 0.5).slice(0, 3);
+    for (const m of pool) (this.mutators as unknown as Record<string, unknown>)[m.key] = m.options[Math.floor(Math.random() * m.options.length)].value;
+    this.buildMutators();
   }
 
   private openSetup(mode: 'match' | 'freeplay') {

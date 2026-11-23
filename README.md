@@ -36,6 +36,8 @@ Build de producción: `npm run build` (sale en `dist/`, es estático y se puede 
   - Reglas: kickoff con 5 posiciones, reloj, gol de oro y fin cuando la pelota toca el piso en 0:00.
   - Puntaje y estadísticas: goles, asistencias, atajadas, tiros, demos y toques.
 - **Juego libre** con turbo infinito opcional.
+- **Mutadores** en partidos y juego libre: gravedad, rebote, velocidad y peso de la pelota, turbo (ilimitado, recarga, sin turbo, fuerza), demoliciones, tope de goles y velocidad del juego.
+- **Desafíos** contrarreloj con aros: slalom por el piso, vuelta por las paredes y dos recorridos aéreos, con medallas y récords.
 - **Repetición de gol** automática con cámara lenta (se saltea con Espacio / A).
 - **Cámara** de pelota y de auto con FOV, distancia, altura, ángulo, rigidez, giro y transición configurables.
 - **HUD:** marcador, medidor de turbo, feed de eventos, nombres sobre los autos y tabla de puntajes (Tab).
@@ -66,6 +68,7 @@ Cielos HDRI y texturas de Poly Haven, todos **CC0** (dominio público). Ver `pub
 ```bash
 npm run test:sim    # física: velocidades, saltos, flips, paredes, rebotes, tiros, goles
 npm run test:bots   # partidos completos bot vs bot (1v1, 2v2, 3v3)
+npm run test:rules  # mutadores y desafíos
 npm run typecheck
 ```
 

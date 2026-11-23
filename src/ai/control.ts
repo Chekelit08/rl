@@ -3,7 +3,8 @@
 
 import { arenaDistance, arenaNormal } from '../sim/arena.ts';
 import type { Car, CarInput } from '../sim/car.ts';
-import { CAR, CURVATURE_CURVE, GRAVITY, THROTTLE_CURVE } from '../sim/constants.ts';
+import { CAR, CURVATURE_CURVE, THROTTLE_CURVE } from '../sim/constants.ts';
+import { RULES } from '../sim/rules.ts';
 import { clamp, curve, Quat, V3 } from '../sim/math.ts';
 import type { BotParams } from './params.ts';
 import { HORIZON, SLICE_DT } from './prediction.ts';
@@ -90,7 +91,7 @@ export const DOUBLE_JUMP_Z = new Float32Array(JUMP_TICKS);
     const dt = 1 / 120;
     let didDouble = false;
     for (let i = 0; i < JUMP_TICKS; i++) {
-      let a = GRAVITY;
+      let a = RULES.gravity;
       if (t < CAR.JUMP_MAX_TIME) a += CAR.JUMP_ACCEL * (t < CAR.JUMP_MIN_TIME ? 0.62 : 1);
       vz += a * dt;
       if (dbl && !didDouble && t >= CAR.JUMP_MAX_TIME + 2 / 120) { vz += CAR.JUMP_IMPULSE; didDouble = true; }
@@ -241,7 +242,7 @@ export function predictLanding(car: Car, maxT = 3): Landing | null {
   const v = car.vel.clone();
   const dt = 1 / 60;
   for (let t = dt; t <= maxT; t += dt) {
-    v.z += GRAVITY * dt;
+    v.z += RULES.gravity * dt;
     p.addScaledIn(v, dt);
     const d = arenaDistance(p.x, p.y, p.z);
     if (d < CAR.REST_Z + 12) return { t, pos: p.clone(), normal: arenaNormal(p.x, p.y, p.z) };

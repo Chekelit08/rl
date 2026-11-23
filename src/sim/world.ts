@@ -8,6 +8,7 @@ import {
   ARENA, BALL, BIG_PADS, CAR, CAR_BODIES, DT, KICKOFF_SPAWNS, PAD, RESPAWNS, SMALL_PADS,
 } from './constants.ts';
 import { rng, V3 } from './math.ts';
+import { applyRules, makeRules, type Rules } from './rules.ts';
 import { classifyTouch, EPIC_SAVE_BONUS, FEAT_POINTS, isEpicSave, type TouchFeat } from './touchEvents.ts';
 
 export type Phase = 'countdown' | 'playing' | 'goal' | 'ended';
@@ -18,6 +19,8 @@ export interface MatchConfig {
   duration: number; // segundos
   unlimitedBoost: boolean;
   seed: number;
+  /** Mutadores (opcional; sin esto rigen las reglas estándar). */
+  rules?: Partial<Rules>;
 }
 
 export interface Pad { pos: V3; big: boolean; active: boolean; timer: number }
@@ -55,6 +58,7 @@ const BOT_NAMES = ['Chispa', 'Turbina', 'Rayo', 'Pistón', 'Nitro', 'Bujía', 'C
 
 export class World {
   cfg: MatchConfig;
+  rules: Rules;
   cars: Car[] = [];
   ball = new Ball();
   pads: Pad[] = [];
@@ -76,6 +80,8 @@ export class World {
 
   constructor(cfg: MatchConfig) {
     this.cfg = cfg;
+    this.rules = makeRules(cfg.rules);
+    applyRules(this.rules);
     this.clock = cfg.duration;
     this.rand = rng(cfg.seed);
     for (const [x, y] of BIG_PADS) this.pads.push({ pos: new V3(x, y, 73), big: true, active: true, timer: 0 });
@@ -85,7 +91,7 @@ export class World {
   addCar(team: number, name: string, bodyIndex = 0, isBot = false) {
     const c = new Car(this.cars.length, team, name, CAR_BODIES[bodyIndex % CAR_BODIES.length]);
     c.isBot = isBot;
-    c.unlimitedBoost = this.cfg.unlimitedBoost;
+    c.unlimitedBoost = this.cfg.unlimitedBoost || this.rules.boostMode === 'unlimited';
     this.cars.push(c);
     return c;
   }
@@ -143,6 +149,7 @@ export class World {
   step(inputs: CarInput[]) {
     this.tick++;
     const dt = DT;
+    applyRules(this.rules);
 
     if (this.phase === 'countdown') {
       this.phaseTimer -= dt;
@@ -212,7 +219,7 @@ export class World {
       }
       const r = p.big ? PAD.BIG_RADIUS : PAD.SMALL_RADIUS;
       for (const c of this.cars) {
-        if (c.demoed || c.boost >= 100) continue;
+        if (c.demoed || c.boost >= 100 || this.rules.boostMode === 'none') continue;
         const dx = c.pos.x - p.pos.x, dy = c.pos.y - p.pos.y;
         if (dx * dx + dy * dy < r * r && Math.abs(c.pos.z - p.pos.z) < PAD.HEIGHT + 40) {
           c.boost = Math.min(100, c.boost + (p.big ? PAD.BIG_AMOUNT : PAD.SMALL_AMOUNT));
@@ -299,6 +306,7 @@ export class World {
 
   /** ¿En qué arco entraría la pelota (dueño) en los próximos 2.5 s? -1 si en ninguno. */
   private ballWouldScore(vel: V3): number {
+    applyRules(this.rules);
     const b = this.ball.clone();
     b.vel = vel.clone();
     for (let i = 0; i < 300; i++) {
@@ -329,7 +337,7 @@ export class World {
     this.ball.frozen = true;
     this.phase = 'goal';
     this.phaseTimer = this.cfg.mode === 'match' ? 3 : 1.5;
-    if (this.overtime && this.cfg.mode === 'match') this.endMatch();
+    if (this.cfg.mode === 'match' && (this.overtime || (this.rules.maxGoals > 0 && this.score[team] >= this.rules.maxGoals))) this.endMatch();
   }
 
   endMatch() {

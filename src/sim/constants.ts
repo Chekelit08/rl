@@ -90,7 +90,7 @@ export const CAR = {
 export const THROTTLE_CURVE = [[0, 1], [1400, 0.1], [1410, 0]] as const;
 // Curvatura máxima de giro (1/uu) según velocidad hacia adelante.
 export const CURVATURE_CURVE = [
-  [0, 0.0069], [500, 0.00398], [1000, 0.00235], [1500, 0.001375], [1750, 0.0011], [2500, 0.00088],
+  [0, 0.0069], [500, 0.00398], [1000, 0.00235], [1500, 0.001375], [1750, 0.0011], [2300, 0.00088],
 ] as const;
 export const STEER_ANGLE_CURVE = [[0, 0.53356], [500, 0.3193], [1000, 0.18203], [1500, 0.1057], [1750, 0.08507], [3000, 0.03454]] as const;
 export const POWERSLIDE_STEER_CURVE = [[0, 0.39235], [2500, 0.1261]] as const;

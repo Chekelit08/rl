@@ -94,6 +94,9 @@ export class Extras {
   // ---------- Ganchos llamados desde main.ts ----------
 
   /** Al crear un mundo nuevo (antes de tomar el primer snapshot). */
+  /** El próximo mundo no es juego libre ni entrenamiento (por ejemplo un desafío): sin HUD ni atajos de juego libre. */
+  quietNext() { this.quietWorld = true; }
+
   onWorldStart(cfg: MatchConfig, attract: boolean) {
     if (this.recorder && this.rec.endTicks >= 0) void this.finishRecording();
     this.recorder = null;

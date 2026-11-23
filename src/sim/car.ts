@@ -3,10 +3,11 @@
 
 import { arenaDistance, arenaNormal, arenaRaycast } from './arena.ts';
 import {
-  CAR, type CarBody, CURVATURE_CURVE, GRAVITY, LAT_FRICTION_CURVE, NON_STICKY_FRICTION_CURVE,
+  CAR, type CarBody, CURVATURE_CURVE, LAT_FRICTION_CURVE, NON_STICKY_FRICTION_CURVE,
   POWERSLIDE_STEER_CURVE, STEER_ANGLE_CURVE, THROTTLE_CURVE,
 } from './constants.ts';
 import { clamp, curve, Quat, sign, V3 } from './math.ts';
+import { boostRecharge, RULES } from './rules.ts';
 
 export interface CarInput {
   throttle: number; // -1..1
@@ -156,7 +157,7 @@ export function stepCar(c: Car, inp: CarInput, dt: number) {
 
   if (!(c.onGround && driveOnGround(c, inp, dt))) {
     airControl(c, inp, dt);
-    c.vel.z += GRAVITY * dt;
+    c.vel.z += RULES.gravity * dt;
   }
 
   updateJump(c, inp, jumpPressed, dt, groundAtStart);
@@ -165,7 +166,7 @@ export function stepCar(c: Car, inp: CarInput, dt: number) {
   updateAutoRoll(c, inp, dt);
 
   if (c.isBoosting) {
-    const a = c.onGround ? CAR.BOOST_GROUND : CAR.BOOST_AIR;
+    const a = (c.onGround ? CAR.BOOST_GROUND : CAR.BOOST_AIR) * RULES.boostPower;
     c.vel.addScaledIn(c.forward(), a * dt);
   }
 
@@ -207,7 +208,11 @@ function updateBoostState(c: Car, inp: CarInput, dt: number) {
     c.boost = Math.max(0, c.boost - CAR.BOOST_PER_SEC * dt);
   } else {
     c.boostingTime = 0;
+    // Mutador: recarga pasiva de turbo
+    const re = boostRecharge(RULES.boostMode);
+    if (re > 0) c.boost = Math.min(100, c.boost + re * dt);
   }
+  if (RULES.boostMode === 'none') { c.boost = 0; c.isBoosting = false; }
 }
 
 /** Devuelve false si el auto se despegó de la superficie en este tick. */
@@ -222,7 +227,7 @@ function driveOnGround(c: Car, inp: CarInput, dt: number): boolean {
   const absVf0 = Math.abs(c.vel.dot(fwd));
   let sticky = 0.5;
   if (throttle !== 0 || absVf0 > CAR.STOP_SPEED) sticky += 1 - Math.abs(n.z);
-  const ext = new V3(0, 0, GRAVITY).addScaledIn(n, GRAVITY * sticky);
+  const ext = new V3(0, 0, RULES.gravity).addScaledIn(n, RULES.gravity * sticky);
   const an = ext.dot(n);
   if (an > 0) {
     // La superficie no nos sostiene (techo): despegamos
@@ -473,7 +478,7 @@ function tryLand(c: Car) {
   const vn = c.vel.dot(n);
   if (vn > 50) return;
   // Superficies que no pueden sostener el auto (techo): sólo "tocamos" si chocamos contra ellas
-  const an = GRAVITY * n.z + GRAVITY * (1.5 - Math.abs(n.z)); // aceleración normal con adherencia total
+  const an = RULES.gravity * n.z + RULES.gravity * (1.5 - Math.abs(n.z)); // aceleración normal con adherencia total
   if (an > 0 && vn > -100) return;
   c.onGround = true;
   c.groundNormal = n.clone();

@@ -2,7 +2,8 @@
 // Cada maniobra se ejecuta tick a tick hasta terminar; mientras dura, tiene prioridad sobre la estrategia.
 
 import type { Car, CarInput } from '../sim/car.ts';
-import { BALL, CAR, DT, GRAVITY } from '../sim/constants.ts';
+import { BALL, CAR, DT } from '../sim/constants.ts';
+import { RULES } from '../sim/rules.ts';
 import { clamp, V3 } from '../sim/math.ts';
 import type { World } from '../sim/world.ts';
 import { flat, forwardSpeed, hasFlip, orient, recover } from './control.ts';
@@ -167,7 +168,7 @@ export class Aerial extends Maneuver {
   /** Aceleración necesaria para estar en P dentro de T segundos (descontando la gravedad). */
   static required(car: Car, P: V3, T: number): V3 {
     const a = P.sub(car.pos).sub(car.vel.scale(T)).scale(2 / (T * T));
-    a.z -= GRAVITY;
+    a.z -= RULES.gravity;
     return a;
   }
 
@@ -281,13 +282,13 @@ export class Aerial extends Maneuver {
     const launchT = 0.3;
     if (T < launchT + 0.25 || boost < 8) return false;
     // Estado aproximado al final del despegue
-    const vz = (CAR.JUMP_IMPULSE * 2 + CAR.JUMP_ACCEL * CAR.JUMP_MAX_TIME) + GRAVITY * launchT;
+    const vz = (CAR.JUMP_IMPULSE * 2 + CAR.JUMP_ACCEL * CAR.JUMP_MAX_TIME) + RULES.gravity * launchT;
     const v1 = vel.add(up.scale(vz));
     const p1 = pos.add(vel.scale(launchT)).add(up.scale(100));
     const rem = T - launchT;
     const P = Aerial.contactPoint(ballPos, shotTarget);
     const a = P.sub(p1).sub(v1.scale(rem)).scale(2 / (rem * rem));
-    a.z -= GRAVITY;
+    a.z -= RULES.gravity;
     const mag = a.len();
     const maxA = CAR.BOOST_AIR * (0.62 + 0.25 * skill);
     if (mag > maxA) return false;

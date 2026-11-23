@@ -1,8 +1,9 @@
 // Física de la pelota: gravedad, drag, rebote con fricción y spin, límites.
 
 import { arenaDistance, arenaNormal } from './arena.ts';
-import { BALL, GRAVITY } from './constants.ts';
+import { BALL } from './constants.ts';
 import { Quat, V3 } from './math.ts';
+import { RULES } from './rules.ts';
 
 export class Ball {
   pos = new V3(0, 0, BALL.REST_Z);
@@ -30,15 +31,16 @@ export class Ball {
   }
 }
 
-const INV_MASS = 1 / BALL.MASS;
-const INERTIA = 0.4 * BALL.MASS * BALL.RADIUS * BALL.RADIUS;
+/** Masa inversa e inercia de la pelota con el mutador de peso aplicado. */
+export function ballInvMass() { return 1 / (BALL.MASS * RULES.ballMass); }
+export function ballInertia() { return 0.4 * BALL.MASS * RULES.ballMass * BALL.RADIUS * BALL.RADIUS; }
 
 /** Avanza la pelota un tick. Devuelve la velocidad normal del impacto contra la arena (0 si no hubo). */
 export function stepBall(b: Ball, dt: number): number {
   if (b.frozen) return 0;
-  b.vel.z += GRAVITY * dt;
+  b.vel.z += RULES.gravity * dt;
   b.vel.scaleIn(1 - BALL.DRAG * dt);
-  b.vel.clampLenIn(BALL.MAX_SPEED);
+  b.vel.clampLenIn(RULES.ballMaxSpeed);
   b.pos.addScaledIn(b.vel, dt);
   b.q.integrateIn(b.ang, dt);
   return collideBallArena(b);
@@ -46,6 +48,7 @@ export function stepBall(b: Ball, dt: number): number {
 
 export function collideBallArena(b: Ball): number {
   const R = BALL.RADIUS;
+  const INV_MASS = ballInvMass(), INERTIA = ballInertia();
   const d = arenaDistance(b.pos.x, b.pos.y, b.pos.z);
   if (d >= R) return 0;
   const n = arenaNormal(b.pos.x, b.pos.y, b.pos.z);
@@ -54,7 +57,7 @@ export function collideBallArena(b: Ball): number {
   const vp = b.vel.add(b.ang.cross(r));
   const vn = vp.dot(n);
   if (vn >= 0) return 0;
-  const e = vn > -25 ? 0 : BALL.RESTITUTION;
+  const e = vn > -25 ? 0 : RULES.ballBounce;
   const jn = (-(1 + e) * vn) / INV_MASS;
   b.vel.addScaledIn(n, jn * INV_MASS);
   const vt = vp.sub(n.scale(vn));
@@ -70,6 +73,3 @@ export function collideBallArena(b: Ball): number {
   b.ang.clampLenIn(BALL.MAX_ANG);
   return -vn;
 }
-
-export const BALL_INV_MASS = INV_MASS;
-export const BALL_INERTIA = INERTIA;

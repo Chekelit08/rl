@@ -1,6 +1,7 @@
 // Colisiones auto↔pelota (con el impulso extra que da "feel" a los golpes) y auto↔auto (bump / demolición).
 
-import { Ball, BALL_INERTIA, BALL_INV_MASS } from './ball.ts';
+import { Ball, ballInertia, ballInvMass } from './ball.ts';
+import { RULES } from './rules.ts';
 import { Car } from './car.ts';
 import {
   BALL, BALL_HIT_EXTRA_CURVE, BUMP_AIR_CURVE, BUMP_GROUND_CURVE, BUMP_UP_CURVE, CAR,
@@ -60,12 +61,13 @@ export function collideCarBall(c: Car, b: Ball, tick: number): BallHit | null {
     flipReset = true;
   }
 
+  const BALL_INV_MASS = ballInvMass(), BALL_INERTIA = ballInertia();
   // Velocidades antes del impulso (para el impulso extra)
   const ballVel0 = b.vel.clone();
   const carVel0 = c.vel.clone();
 
   // Corrección de posición
-  const carShare = c.onGround ? 0 : BALL.MASS / (CAR.MASS + BALL.MASS);
+  const carShare = c.onGround ? 0 : (BALL.MASS * RULES.ballMass) / (CAR.MASS + BALL.MASS * RULES.ballMass);
   b.pos.addScaledIn(n, pen * (1 - carShare));
   c.pos.addScaledIn(n, -pen * carShare);
 
@@ -118,7 +120,7 @@ export function collideCarBall(c: Car, b: Ball, tick: number): BallHit | null {
     }
   }
 
-  b.vel.clampLenIn(BALL.MAX_SPEED);
+  b.vel.clampLenIn(RULES.ballMaxSpeed);
   b.ang.clampLenIn(BALL.MAX_ANG);
   return { carId: c.id, impulse: impulseMag, point: contact, flipReset };
 }
@@ -162,6 +164,9 @@ export function collideCars(a: Car, b: Car): CarCarEvent[] {
   const n = sat.normal; // de a hacia b
   a.pos.addScaledIn(n, -sat.depth / 2);
   b.pos.addScaledIn(n, sat.depth / 2);
+  // Velocidades antes del choque: el bump y la demolición se deciden con estas, no con las que deja el impulso físico
+  // (si no, un golpe de frente a un rival quieto nunca cuenta: el impulso ya le pasó la mitad de la velocidad).
+  const va0 = a.vel.clone(), vb0 = b.vel.clone();
   const vn = b.vel.sub(a.vel).dot(n);
   if (vn < 0) {
     const j = (-(1 + 0.1) * vn) / 2;
@@ -171,12 +176,13 @@ export function collideCars(a: Car, b: Car): CarCarEvent[] {
 
   for (const [c1, c2] of [[a, b], [b, a]] as const) {
     if (c1.bumpCooldowns.has(c2.id)) continue;
+    const v1 = c1 === a ? va0 : vb0, v2 = c1 === a ? vb0 : va0;
     const delta = c2.pos.sub(c1.pos);
-    if (c1.vel.dot(delta) <= 0) continue;
-    const velDir = c1.vel.norm();
+    if (v1.dot(delta) <= 0) continue;
+    const velDir = v1.norm();
     const dirTo = delta.norm();
-    const towards = c1.vel.dot(dirTo);
-    const away = c2.vel.dot(velDir);
+    const towards = v1.dot(dirTo);
+    const away = v2.dot(velDir);
     if (towards <= away) continue;
     // Punto de contacto aproximado: punto del hitbox de c1 más cercano al centro de c2
     const lc = c1.q.unrotate(c2.hitboxCenter().sub(c1.hitboxCenter()));
@@ -184,7 +190,7 @@ export function collideCars(a: Car, b: Car): CarCarEvent[] {
     const clx = Math.max(-h.x, Math.min(h.x, lc.x)) + c1.offset.x;
     if (clx <= CAR.BUMP_MIN_FORWARD) continue;
 
-    const isDemo = c1.supersonic && c1.team !== c2.team;
+    const isDemo = RULES.demo !== 'off' && (c1.supersonic || RULES.demo === 'contact') && c1.team !== c2.team;
     if (isDemo) {
       c2.demoed = true;
       c2.respawnTimer = CAR.DEMO_RESPAWN;
