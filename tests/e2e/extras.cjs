@@ -115,7 +115,7 @@ const check = (name, ok, detail = '') => { console.log(`${ok ? '✅' : '❌'} ${
   st = await G(() => ({ on: [...document.querySelectorAll('.tg-viewer .seg button.on')].map((b) => b.textContent), t: document.querySelector('.tg-vtime').textContent }));
   check('Visor: velocidad, cámara de jugador y scrub', st.on.includes('0.25×') && st.on.includes('Vos') && st.t.startsWith('0:01'), JSON.stringify(st));
   await press('Space');
-  const paused = await G(() => document.querySelector('.tg-vgroup .tg-vbtn:nth-child(2)').textContent === '▶');
+  const paused = await G(() => document.querySelector('.tg-vplay').dataset.state === 'pausa');
   check('Visor: Espacio pausa', paused);
   // Exportar WebM
   const hasExport = await G(() => [...document.querySelectorAll('.tg-viewer button')].some((b) => b.textContent.startsWith('Exportar')));

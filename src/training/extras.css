@@ -38,7 +38,7 @@ body.tg-training #hud .scoreboard, body.tg-training #hint, body.tg-freeplay #hin
 .tg-banner.bad { color: var(--red); }
 .tg-fchips { position: absolute; top: 16px; left: 18px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .tg-fchips .chip.on { border-color: var(--boost); color: var(--boost); }
-.tg-keys { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); color: var(--muted); font-weight: 600; font-size: 14px; background: rgba(4,8,16,.6); padding: 4px 12px; border-radius: 6px; white-space: nowrap; max-width: calc(100vw - 380px); overflow: hidden; text-overflow: ellipsis; }
+.tg-keys { position: absolute; bottom: 18px; left: 18px; color: var(--muted); font-weight: 600; font-size: 14px; background: rgba(4,8,16,.6); padding: 4px 12px; border-radius: 6px; white-space: nowrap; max-width: calc(100vw - 440px); overflow: hidden; text-overflow: ellipsis; }
 .tg-rewind { position: absolute; top: 46%; left: 50%; transform: translateX(-50%); text-align: center; font-family: var(--display); letter-spacing: 2px; color: var(--boost); text-shadow: 0 2px 12px rgba(0,0,0,.7); }
 .tg-rbar { width: 220px; height: 6px; margin: 8px auto 0; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
 .tg-rbar i { display: block; height: 100%; background: var(--boost); }
@@ -98,6 +98,7 @@ body.tg-training #hud .scoreboard, body.tg-training #hint, body.tg-freeplay #hin
 .tg-vgroup.seg button.tg-vtoggle { background: rgba(255,194,61,.15); border-color: rgba(255,194,61,.4); }
 .tg-vbtn { pointer-events: auto; font-family: var(--text); font-weight: 700; font-size: 15px; color: var(--ink); background: rgba(20,32,56,.95); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; min-width: 44px; }
 .tg-vbtn:hover { border-color: rgba(140,180,255,.5); }
+.tg-vplay { display: inline-grid; place-items: center; height: 32px; }
 .tg-vbtn.accent { background: linear-gradient(90deg, var(--blue), #1f5fd6); border-color: transparent; }
 .tg-vtime { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 96px; color: var(--muted); }
 .tg-vgroup:last-child { margin-left: auto; }

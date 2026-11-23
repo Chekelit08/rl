@@ -22,6 +22,8 @@ export interface ViewerOptions {
 type CamMode = 'director' | 'libre' | 'jugador';
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
 const MATCH_EXPORT_SECONDS = 30;
+const ICON_PLAY = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 2h4v12H3zM9 2h4v12H9z" fill="currentColor"/></svg>';
 
 export class ReplayViewer implements ExtScreen {
   readonly kind = 'visor';
@@ -102,7 +104,7 @@ export class ReplayViewer implements ExtScreen {
     tl.append(this.range, marks);
 
     const row = el('div', 'tg-vrow');
-    this.playBtn = button('⏸', 'tg-vbtn', () => this.togglePlay());
+    this.playBtn = button(ICON_PAUSE, 'tg-vbtn tg-vplay', () => this.togglePlay());
     this.playBtn.title = 'Play / pausa (Espacio)';
     this.timeLabel = el('span', 'tg-vtime');
     const transport = el('div', 'tg-vgroup');
@@ -256,7 +258,9 @@ export class ReplayViewer implements ExtScreen {
     const key = `${this.playing}|${this.speed}|${this.cam}|${this.carId}|${this.ballCam}`;
     if (key !== this.uiKey) {
       this.uiKey = key;
-      this.playBtn.textContent = this.playing ? '⏸' : '▶';
+      this.playBtn.innerHTML = this.playing ? ICON_PAUSE : ICON_PLAY;
+      this.playBtn.dataset.state = this.playing ? 'reproduciendo' : 'pausa';
+      this.playBtn.setAttribute('aria-label', this.playing ? 'Pausa' : 'Reproducir');
       this.speedRow.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', SPEEDS[i] === this.speed));
       this.camRow.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
         const m = b.dataset.cam, id = Number(b.dataset.car ?? -1);
