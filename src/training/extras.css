@@ -33,7 +33,7 @@ body.tg-training #hud .scoreboard, body.tg-training #hint, body.tg-freeplay #hin
 .tg-timebar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.1); margin-top: 8px; overflow: hidden; }
 .tg-timebar i { display: block; height: 100%; width: 100%; background: var(--blue); transition: width .1s linear; }
 .tg-timebar i.low { background: var(--red); }
-.tg-banner { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-family: var(--display); font-size: clamp(44px, 8vw, 96px); letter-spacing: 2px; text-shadow: 0 6px 30px rgba(0,0,0,.6); animation: pop .45s cubic-bezier(.2, 1.6, .4, 1); white-space: nowrap; }
+.tg-banner { position: absolute; top: 58%; left: 50%; transform: translate(-50%, -50%); font-family: var(--display); font-size: clamp(36px, 6vw, 72px); letter-spacing: 2px; text-shadow: 0 6px 30px rgba(0,0,0,.6); animation: pop .45s cubic-bezier(.2, 1.6, .4, 1); white-space: nowrap; }
 .tg-banner.ok { color: #4fe38a; }
 .tg-banner.bad { color: var(--red); }
 .tg-fchips { position: absolute; top: 16px; left: 18px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }

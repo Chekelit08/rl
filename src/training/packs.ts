@@ -109,6 +109,38 @@ export const OFFICIAL_PACKS: Pack[] = [
     ],
   },
   {
+    id: 'of-muralla', name: 'La muralla', category: 'arquero', difficulty: 'pro', author: 'TURBOGOL', official: true, created: 0,
+    description: 'Remates fuertes, ángulos cerrados y pelotas altas. Arrancás mal parado en varios.',
+    shots: [
+      goalie([0, -1800, 93], [780, 120], 2900, [0, -5050], 90, 'Bomba al palo'),
+      goalie([-1500, -1500, 300], [-760, 560], 2800, [200, -5050], 90, 'Al ángulo del primer palo'),
+      goalie([2200, -2400, 93], [-700, 100], 2700, [0, -5050], 90, 'Cruzado rasante'),
+      goalie([0, -2600, 800], [500, 400], 2600, [0, -4900], 90, 'Volea alta'),
+      goalie([-3000, -3600, 200], [600, 350], 2200, [-500, -5050], 0, 'Centro-tiro desde la esquina'),
+      goalie([600, -1200, 93], [-650, 300], 2400, [700, -4500], 270, 'Arrancás de espaldas'),
+      goalie([0, -3000, 93], [0, 430], 1300, [0, -3400], 90, 'Vaselina por encima', 7),
+      goalie([1800, -800, 1200], [-600, 200], 2500, [0, -5050], 90, 'Remate desde el aire'),
+      goalie([-900, -2200, 93], [750, 450], 3000, [-1500, -4600], 0, 'Lejos del palo'),
+      goalie([0, -500, 93], [-800, 130], 3200, [0, -5050], 90, 'El más fuerte'),
+    ],
+  },
+  {
+    id: 'of-primeros-vuelos', name: 'Primeros vuelos', category: 'aereo', difficulty: 'novato', author: 'TURBOGOL', official: true, created: 0,
+    description: 'Pelotas que flotan a poca altura para aprender a saltar, usar turbo en el aire y empujarla al arco.',
+    shots: [
+      s([0, 2400, 300], [0, 0, 700], [0, 900], 90, 'Saltá y tocala en el aire'),
+      s([0, 2800, 500], [0, 0, 500], [0, 1300], 90, 'Doble salto'),
+      s([-600, 2600, 350], [0, 0, 800], [-600, 1000], 90, 'Aéreo corto'),
+      s([600, 3000, 300], [0, -200, 900], [600, 1500], 90, 'Pelota que viene alta'),
+      s([0, 3200, 700], [0, 0, 300], [0, 1400], 90, 'Primer vuelo con turbo'),
+      s([-1200, 2800, 400], [300, 0, 700], [-400, 1100], 90, 'Centro alto suave'),
+      s([1200, 2800, 400], [-300, 0, 700], [400, 1100], 90, 'Centro alto desde la derecha'),
+      s([0, 3800, 400], [0, 0, 800], [0, 2300], 90, 'Cabezazo cerca del arco'),
+      s([0, 2000, 250], [0, 300, 900], [0, 600], 90, 'Seguí la pelota que sube'),
+      s([-800, 3400, 600], [200, 100, 500], [-800, 1800], 90, 'Aéreo al palo'),
+    ],
+  },
+  {
     id: 'of-vuelo-alto', name: 'Vuelo alto', category: 'aereo', difficulty: 'pro', author: 'TURBOGOL', official: true, created: 0,
     description: 'Pelotas en el aire: saltá, turbo y apuntá con el control aéreo. Empezás con turbo lleno.',
     shots: [
