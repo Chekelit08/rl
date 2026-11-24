@@ -83,7 +83,7 @@ export class PostMatch {
     if (!this.visible || this.el.querySelector('.pm-res')) return;
     const a = this.args;
     const cls = a.winner === a.myTeam ? 'win' : a.winner < 0 ? 'draw' : 'loss';
-    const res = cls === 'win' ? 'Victoria' : cls === 'draw' ? 'Empate' : 'Derrota';
+    const res = cls === 'win' ? '¡Victoria!' : cls === 'draw' ? 'Empate' : 'Derrota';
     const x = a.xp;
     const xpHtml = x ? `
       <section class="pm-xp">

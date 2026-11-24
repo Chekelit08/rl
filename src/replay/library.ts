@@ -5,6 +5,7 @@ import type { Extras } from '../training/extras.ts';
 import { canExportVideo } from './exporter.ts';
 import { packFile, type ReplayKind, type ReplayMeta, unpackFile } from './format.ts';
 import { deleteReplay, listReplays, loadReplay, saveReplay, updateMeta } from './store.ts';
+import { icon, type IconName } from '../ui/icons.ts';
 
 export class ReplayLibrary {
   private ext: Extras;
@@ -85,25 +86,28 @@ export class ReplayLibrary {
         else { this.ext.toast('Elegí el momento en el visor y tocá «Exportar»'); void this.ext.openViewer(m.id); }
       }));
     }
+    // Acciones secundarias: sólo ícono, con el nombre al pasar el mouse
+    const iconBtn = (name: IconName, title: string, cls: string, fn: () => void | Promise<void>) => {
+      const b = button(icon(name, ''), `btn small tg-ibtn ${cls}`, () => { this.click(); void fn(); });
+      b.title = title;
+      b.setAttribute('aria-label', title);
+      return b;
+    };
     act.append(
-      button(m.saved ? '★' : '☆', 'btn small', async () => {
-        this.click();
+      iconBtn('star', m.saved ? 'Dejar de conservar' : 'Conservar siempre', m.saved ? 'on' : '', async () => {
         await updateMeta({ ...m, saved: !m.saved });
         void this.fill();
       }),
-      button('Renombrar', 'btn small', async () => {
-        this.click();
+      iconBtn('edit', 'Cambiar el nombre', '', async () => {
         const t = await askText('Nombre', m.title);
         if (t && t.trim()) { await updateMeta({ ...m, title: t.trim().slice(0, 60) }); void this.fill(); }
       }),
-      button('Archivo', 'btn small', async () => {
-        this.click();
+      iconBtn('file', 'Descargar el archivo', '', async () => {
         const d = await loadReplay(m.id);
         if (d) download(await packFile(d.meta, d.frames), `turbogol-${m.kind}-${m.id}.tgrep`);
       }),
-      button('Borrar', 'btn small danger', async () => {
-        this.click();
-        if (await confirmBox('Borrar', `¿Borrar "${m.title}"?`, 'Borrar')) { await deleteReplay(m.id); void this.fill(); }
+      iconBtn('trash', 'Borrar', 'danger', async () => {
+        if (await confirmBox('Borrar', `¿Borrar «${m.title}»? No se puede deshacer.`, 'Borrar')) { await deleteReplay(m.id); void this.fill(); }
       }),
     );
     r.appendChild(act);

@@ -584,8 +584,8 @@ export class OnlineMode {
             <h3>Crear sala</h3>
             <div class="row"><label>Modo</label>${this.seg('cTeam', [[1, '1v1'], [2, '2v2'], [3, '3v3']], c.teamSize)}</div>
             <div class="row"><label>Duración</label>${this.seg('cTime', [[180, '3 min'], [300, '5 min'], [600, '10 min']], c.duration)}</div>
-            <div class="row"><label>Completar con bots</label>${this.seg('cBots', [[1, 'Sí'], [0, 'No']], c.botFill ? 1 : 0)}</div>
-            <div class="row"><label>Nivel de los bots</label>${this.seg('cDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], c.botDifficulty)}</div>
+            <div class="row"><label>Bots de relleno</label>${this.seg('cBots', [[1, 'Sí'], [0, 'No']], c.botFill ? 1 : 0)}</div>
+            <div class="row"><label>Nivel de bots</label>${this.seg('cDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], c.botDifficulty)}</div>
             <button class="btn primary" data-on="create" ${off}>Crear sala</button>
           </section>
           <section class="on-box">
@@ -625,8 +625,8 @@ export class OnlineMode {
         <div class="on-cfg">
           <div class="row"><label>Modo</label>${this.seg('rTeam', [[1, '1v1'], [2, '2v2'], [3, '3v3']], cfg.teamSize, !isHost || playing)}</div>
           <div class="row"><label>Duración</label>${this.seg('rTime', [[180, '3 min'], [300, '5 min'], [600, '10 min']], cfg.duration, !isHost || playing)}</div>
-          <div class="row"><label>Completar con bots</label>${this.seg('rBots', [[1, 'Sí'], [0, 'No']], cfg.botFill ? 1 : 0, !isHost || playing)}</div>
-          <div class="row"><label>Nivel de los bots</label>${this.seg('rDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], cfg.botDifficulty, !isHost || playing)}</div>
+          <div class="row"><label>Bots de relleno</label>${this.seg('rBots', [[1, 'Sí'], [0, 'No']], cfg.botFill ? 1 : 0, !isHost || playing)}</div>
+          <div class="row"><label>Nivel de bots</label>${this.seg('rDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], cfg.botDifficulty, !isHost || playing)}</div>
         </div>
         ${err}
         <div class="actions">

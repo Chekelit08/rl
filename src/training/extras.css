@@ -8,6 +8,8 @@
 @keyframes tgIn { from { translate: 0 .75rem; opacity: 0; } }
 .tg-pause-extra { display: flex; flex-direction: column; gap: .5rem; }
 body.tg-training #hud .scoreboard, body.tg-training #hint, body.tg-freeplay #hint { display: none; }
+/* En entrenamiento el resultado de cada tiro lo dice el cartel propio (¡Acierto! / Fallaste) */
+body.tg-training #center, body.tg-training #subcenter { display: none; }
 
 /* ---------- HUD de entrenamiento y juego libre ---------- */
 .tg-hud { position: absolute; inset: 0; pointer-events: none; }
@@ -30,7 +32,7 @@ body.tg-training #hud .scoreboard, body.tg-training #hint, body.tg-freeplay #hin
 .tg-timebar { height: .25rem; margin-top: .625rem; background: rgba(255, 255, 255, .14); overflow: hidden; }
 .tg-timebar i { display: block; width: 100%; height: 100%; background: var(--accent); transition: width .1s linear; }
 .tg-timebar i.low { background: var(--red); }
-.tg-banner { position: absolute; top: 56%; left: 50%; transform: translate(-50%, -50%) skewX(-9deg); padding: .25rem 1.75rem .4375rem; font: 900 clamp(2rem, 5vw, 4rem)/1 var(--display); font-stretch: 122%; letter-spacing: -.02em; text-transform: uppercase; white-space: nowrap; animation: pop .4s cubic-bezier(.2, 1.5, .4, 1); }
+.tg-banner { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%) skewX(-9deg); padding: .25rem 1.75rem .4375rem; font: 900 clamp(2rem, 5vw, 4rem)/1 var(--display); font-stretch: 122%; letter-spacing: -.02em; text-transform: uppercase; white-space: nowrap; animation: pop .4s cubic-bezier(.2, 1.5, .4, 1); }
 .tg-banner.ok { color: #062414; background: var(--ok); }
 .tg-banner.bad { color: #fff; background: var(--red); }
 .tg-fchips { position: absolute; top: 1rem; left: 1.125rem; display: flex; flex-direction: column; align-items: flex-start; gap: .375rem; }
@@ -76,6 +78,9 @@ body.tg-training #hud .scoreboard, body.tg-training #hint, body.tg-freeplay #hin
 .tg-score span { display: grid; place-items: center; min-width: 2.375rem; padding: .3125rem .5rem .375rem; color: #fff; font: 800 1.25rem/1 var(--display); font-variant-numeric: tabular-nums; }
 .tg-score .b, .tg-vscore .b { background: var(--blue); }
 .tg-score .r, .tg-vscore .r { background: var(--red); }
+.tg-ibtn { width: 2.125rem; padding: 0; }
+.tg-ibtn svg { width: .9375rem; height: .9375rem; }
+.tg-ibtn.on { color: var(--accent); border-color: var(--accent); }
 .tg-score.clip { min-width: 4.75rem; justify-content: center; padding: .4375rem 0; color: var(--muted); background: var(--sunk); border: 1px solid var(--line); font: 700 .6875rem/1.2 var(--display); letter-spacing: .14em; text-transform: uppercase; }
 
 /* ---------- Visor ---------- */

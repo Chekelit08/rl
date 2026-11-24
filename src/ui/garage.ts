@@ -1,7 +1,6 @@
 // Garage: sala de exhibición con el auto girando (se dibuja con el renderer principal) y editor de apariencia.
 
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
   allItems, BANNERS, DECALS, EXPLOSIONS, FINISHES, TITLES, TRAILS, WHEELS, unlockLabel, type Item, type Unlock,
 } from '../garage/cosmetics.ts';
@@ -17,13 +16,14 @@ import { CAR_BODIES } from '../sim/constants.ts';
 import { bannerBg } from './banner.ts';
 import { icon } from './icons.ts';
 import { overlay } from './screens.ts';
-import { bodyCards, refreshBodyThumbs } from './thumbs.ts';
+import { aimStudioEnv, studioEnv } from './studio.ts';
+import { BODY_DESC, bodyCards, refreshBodyThumbs } from './thumbs.ts';
 
 const TABS = ['Carrocería', 'Pintura', 'Acabado', 'Calcomanía', 'Llantas', 'Estela', 'Explosión', 'Título', 'Banner'] as const;
 type Tab = (typeof TABS)[number];
 
-// Colores del estudio: pared y piso claros para que el auto resalte
-const WALL_TOP = '#c3cad5', WALL_MID = '#e2e6eb', FLOOR = '#e9ecf0', INK = '#d3d9e1';
+// Colores del estudio: un fondo claro y continuo (sin horizonte) para que el auto resalte
+const BG_TOP = '#c9d0da', BG_BOTTOM = '#eceff3', SIGN = '#f7f8fa';
 
 export class Garage {
   el: HTMLDivElement;
@@ -38,16 +38,15 @@ export class Garage {
   private ring!: THREE.Mesh;
   private blob!: THREE.Mesh;
   private key!: THREE.DirectionalLight;
-  private sign!: THREE.Mesh;
-  private signCanvas = document.createElement('canvas');
+  private backdrop = document.createElement('canvas');
   private signText = '';
   private env: THREE.Texture | null = null;
   private particles = new Particles();
   private smoke = new Particles({ additive: false, grow: 3.5 });
   private fx: CosmeticFx;
   private az = 0.72;
-  private el_ = 0.19;
-  private dist = 350;
+  private el_ = 0.2;
+  private dist = 450;
   private spin = 0;
   private dragging = false;
   private turbo = false;
@@ -69,39 +68,29 @@ export class Garage {
     window.addEventListener('resize', () => this.resize());
   }
 
-  /** Estudio claro: fondo en degradé, piso continuo, plataforma con aro del equipo y el nombre de la carrocería detrás. */
+  /** Estudio claro: fondo pintado (degradé y el nombre de la carrocería en letras enormes), plataforma con el aro del equipo y sombras. */
   private buildScene() {
     const s = this.scene;
-    const cv = document.createElement('canvas');
-    cv.width = 4; cv.height = 256;
-    const g = cv.getContext('2d')!;
-    const grd = g.createLinearGradient(0, 0, 0, 256);
-    grd.addColorStop(0, WALL_TOP); grd.addColorStop(0.52, WALL_MID); grd.addColorStop(0.7, FLOOR); grd.addColorStop(1, FLOOR);
-    g.fillStyle = grd; g.fillRect(0, 0, 4, 256);
-    const bg = new THREE.CanvasTexture(cv); bg.colorSpace = THREE.SRGBColorSpace;
-    s.background = bg;
-    s.fog = new THREE.Fog(WALL_MID, 900, 3200);
-
-    s.add(new THREE.HemisphereLight('#ffffff', '#aeb6c2', 0.85));
-    this.key = new THREE.DirectionalLight('#ffffff', 2.3);
+    s.add(new THREE.HemisphereLight('#ffffff', '#aeb6c2', 0.9));
+    this.key = new THREE.DirectionalLight('#ffffff', 2.4);
     this.key.position.set(240, -330, 520);
     this.key.shadow.mapSize.set(2048, 2048);
     const sc = this.key.shadow.camera;
-    sc.left = -260; sc.right = 260; sc.top = 260; sc.bottom = -260; sc.near = 100; sc.far = 1400;
+    sc.left = -280; sc.right = 280; sc.top = 280; sc.bottom = -280; sc.near = 100; sc.far = 1400;
     this.key.shadow.bias = -0.0006;
     this.key.shadow.normalBias = 0.6;
     const rim = new THREE.DirectionalLight('#eaf1ff', 1.1);
     rim.position.set(-340, 300, 240);
     s.add(this.key, rim);
 
-    // Piso sin luz (mismo tono que el fondo, así no se ve el horizonte) y, encima, un plano que sólo recibe sombras
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(4200, 64), new THREE.MeshBasicMaterial({ color: FLOOR, toneMapped: false }));
-    floor.position.z = -6;
-    const shadowFloor = new THREE.Mesh(new THREE.CircleGeometry(900, 48), new THREE.ShadowMaterial({ opacity: 0.16 }));
+    // No hay piso dibujado: el fondo hace de piso y de pared. Este plano sólo recibe la sombra del auto.
+    const shadowFloor = new THREE.Mesh(new THREE.CircleGeometry(1400, 48), new THREE.ShadowMaterial({ opacity: 0.14 }));
     shadowFloor.position.z = -5.8;
     shadowFloor.receiveShadow = true;
     // Plataforma
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(214, 214, 6, 96), new THREE.MeshStandardMaterial({ color: '#f6f7f9', metalness: 0, roughness: 0.72 }));
+    // Es más grande que la vista: de frente sólo se ve su borde lejano, que pasa por detrás del auto
+    const R = 340;
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 6, 128), new THREE.MeshStandardMaterial({ color: '#fbfbfc', metalness: 0, roughness: 0.75 }));
     disc.rotation.x = Math.PI / 2;
     disc.position.z = -3;
     disc.receiveShadow = true;
@@ -110,16 +99,22 @@ export class Garage {
       m.position.z = z;
       return m;
     };
-    this.ring = flat(188, 198, TEAM_COLORS[0], 0.25);
-    const edge = flat(214, 219, '#141922', -5.6);
+    this.ring = flat(R - 26, R - 16, TEAM_COLORS[0], 0.25);
+    // Sombra propia de la plataforma sobre el piso
+    const base = flat(0, R + 20, '#000000', -5.9);
+    (base.material as THREE.MeshBasicMaterial).transparent = true;
+    (base.material as THREE.MeshBasicMaterial).opacity = 0.1;
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(R + 1, R + 1, 5.6, 128, 1, true), new THREE.MeshBasicMaterial({ color: '#141922', toneMapped: false }));
+    skirt.rotation.x = Math.PI / 2;
+    skirt.position.z = -3.2;
     // Marcas cada 15° en el borde de la plataforma
     const ticks = new THREE.Group();
     const tickGeo = new THREE.PlaneGeometry(9, 2.2);
     const tickMat = new THREE.MeshBasicMaterial({ color: '#141922', toneMapped: false });
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 36; i++) {
       const t = new THREE.Mesh(tickGeo, tickMat);
-      const a = (i / 24) * Math.PI * 2;
-      t.position.set(Math.cos(a) * 207, Math.sin(a) * 207, 0.25);
+      const a = (i / 36) * Math.PI * 2;
+      t.position.set(Math.cos(a) * (R - 8), Math.sin(a) * (R - 8), 0.25);
       t.rotation.z = a;
       ticks.add(t);
     }
@@ -128,46 +123,64 @@ export class Garage {
     bc.width = bc.height = 128;
     const bg2 = bc.getContext('2d')!;
     const rg = bg2.createRadialGradient(64, 64, 8, 64, 64, 64);
-    rg.addColorStop(0, 'rgba(10,14,22,.55)'); rg.addColorStop(0.55, 'rgba(10,14,22,.25)'); rg.addColorStop(1, 'rgba(10,14,22,0)');
+    rg.addColorStop(0, 'rgba(10,14,22,.5)'); rg.addColorStop(0.55, 'rgba(10,14,22,.22)'); rg.addColorStop(1, 'rgba(10,14,22,0)');
     bg2.fillStyle = rg; bg2.fillRect(0, 0, 128, 128);
     this.blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(bc), transparent: true, depthWrite: false, toneMapped: false }));
     this.blob.position.z = 0.4;
-    this.stage.add(floor, shadowFloor, disc, edge, this.ring, ticks, this.blob);
+    this.stage.add(base, shadowFloor, disc, skirt, this.ring, ticks, this.blob);
     s.add(this.stage);
-
-    // Cartel de fondo: el nombre de la carrocería en letras enormes, fijo detrás del auto
-    this.signCanvas.width = 2048; this.signCanvas.height = 512;
-    const tex = new THREE.CanvasTexture(this.signCanvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
-    this.sign = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
-    this.sign.renderOrder = -1;
-    this.camera.add(this.sign);
-    s.add(this.camera);
   }
 
-  private drawSign(text: string) {
-    if (text === this.signText) return;
-    this.signText = text;
-    const draw = () => {
-      const c = this.signCanvas, g = c.getContext('2d')!;
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.clearRect(0, 0, c.width, c.height);
-      g.font = `900 extra-expanded 400px 'Archivo Variable', 'Arial Black', sans-serif`;
+  /** Pinta el fondo: degradé claro y el nombre de la carrocería, centrado en la zona libre y por detrás del auto. */
+  private drawBackdrop() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const k = Math.min(1, 1600 / w);
+    const c = this.backdrop;
+    const cw = Math.max(2, Math.round(w * k)), ch = Math.max(2, Math.round(h * k));
+    const resized = c.width !== cw || c.height !== ch;
+    if (resized) { c.width = cw; c.height = ch; }
+    const g = c.getContext('2d')!;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    const grd = g.createLinearGradient(0, 0, 0, ch);
+    grd.addColorStop(0, BG_TOP); grd.addColorStop(0.62, BG_BOTTOM); grd.addColorStop(1, BG_BOTTOM);
+    g.fillStyle = grd;
+    g.fillRect(0, 0, cw, ch);
+    const f = this.freeArea();
+    const text = this.signText;
+    if (text) {
+      g.font = `900 extra-expanded 300px 'Archivo Variable', 'Arial Black', sans-serif`;
       (g as CanvasRenderingContext2D & { fontStretch?: string }).fontStretch = 'extra-expanded';
-      (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = '-14px';
+      (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = '-10px';
       g.textAlign = 'center';
       g.textBaseline = 'alphabetic';
-      g.fillStyle = INK;
-      const w = g.measureText(text).width;
-      const k = Math.min(1, (c.width - 120) / w);
-      g.setTransform(k, 0, -0.16 * k, k, c.width / 2 + 30, c.height / 2 + 150 * k);
+      g.fillStyle = SIGN;
+      const tw = g.measureText(text).width;
+      const sc = Math.min((f.w * k * 0.9) / tw, (f.h * k * 0.3) / 215);
+      g.setTransform(sc, 0, -0.16 * sc, sc, (f.x + f.w / 2) * k, (f.y + f.h * 0.345) * k);
       g.fillText(text, 0, 0);
-      (this.sign.material as THREE.MeshBasicMaterial).map!.needsUpdate = true;
-    };
-    draw();
-    // Si la tipografía todavía no cargó, se vuelve a dibujar cuando esté
-    void document.fonts?.load("900 100px 'Archivo Variable'").then(() => { if (this.signText === text) draw(); });
+    }
+    const old = this.scene.background as THREE.Texture | null;
+    if (old && !resized) { old.needsUpdate = true; return; }
+    old?.dispose();
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this.scene.background = tex;
+  }
+
+  /** Rectángulo de la ventana que el panel deja libre (a su lado o, en ventanas angostas, arriba). */
+  private freeArea() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const pr = this.panel.getBoundingClientRect();
+    const side = pr.height >= h * 0.9;
+    return side ? { x: pr.width, y: 0, w: w - pr.width, h, side } : { x: 0, y: 0, w, h: h - pr.height, side };
+  }
+
+  private setSign(text: string) {
+    if (text === this.signText) return;
+    this.signText = text;
+    this.drawBackdrop();
+    // Si la tipografía todavía no cargó, se vuelve a pintar cuando esté
+    void document.fonts?.load("900 100px 'Archivo Variable'").then(() => { if (this.active && this.signText === text) this.drawBackdrop(); });
   }
 
   private wire() {
@@ -186,7 +199,7 @@ export class Garage {
     const up = () => { this.dragging = false; };
     v.addEventListener('pointerup', up);
     v.addEventListener('pointercancel', up);
-    v.addEventListener('wheel', (e) => { this.dist = Math.max(230, Math.min(640, this.dist + e.deltaY * 0.3)); e.preventDefault(); }, { passive: false });
+    v.addEventListener('wheel', (e) => { this.dist = Math.max(270, Math.min(760, this.dist + e.deltaY * 0.3)); e.preventDefault(); }, { passive: false });
     v.addEventListener('click', (e) => this.click(e));
     this.panel.addEventListener('click', (e) => this.click(e));
     this.panel.addEventListener('input', (e) => {
@@ -200,18 +213,10 @@ export class Garage {
     const w = window.innerWidth, h = window.innerHeight;
     this.camera.aspect = w / h;
     // Corre la imagen para que el auto quede en el centro de la zona libre (al lado o arriba del panel)
-    const pr = this.panel.getBoundingClientRect();
-    const side = pr.height >= h * 0.9;
-    const sx = side ? pr.width / 2 : 0, sy = side ? 0 : pr.height / 2;
-    this.camera.setViewOffset(w, h, -sx, sy, w, h);
+    const f = this.freeArea();
+    this.camera.setViewOffset(w, h, f.side ? -(w - f.w) / 2 : 0, f.side ? 0 : (h - f.h) / 2, w, h);
     this.camera.updateProjectionMatrix();
-    // El cartel ocupa el ancho de la zona libre
-    const D = 2600;
-    const visH = 2 * D * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const freeW = ((w - (side ? pr.width : 0)) / h) * visH;
-    const sw = freeW * 0.94;
-    this.sign.scale.set(sw / 4, sw / 4, 1);
-    this.sign.position.set(0, visH * 0.115, -D);
+    this.drawBackdrop();
   }
 
   open() {
@@ -219,13 +224,8 @@ export class Garage {
     this.team = 0;
     const r = this.renderer.renderer;
     // Reflejos de estudio propios: no dependen de si el estadio está de día o de noche
-    if (!this.env) {
-      const pm = new THREE.PMREMGenerator(r);
-      this.env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-      pm.dispose();
-    }
-    this.scene.environment = this.env;
-    this.scene.environmentIntensity = 0.8;
+    this.env ??= studioEnv(r);
+    aimStudioEnv(this.scene, this.env, 1.15);
     this.key.castShadow = r.shadowMap.enabled;
     this.renderer.preview = { scene: this.scene, camera: this.camera, update: (dt) => this.update(dt) };
     this.el.classList.remove('hidden');
@@ -266,7 +266,7 @@ export class Garage {
     this.scene.add(v.group);
     this.car = v;
     (this.ring.material as THREE.MeshBasicMaterial).color.set(TEAM_COLORS[this.team]);
-    this.drawSign(CAR_BODIES[lo.body].name.toUpperCase());
+    this.setSign(CAR_BODIES[lo.body].name.toUpperCase());
   }
 
   private carMid = 30;
@@ -311,7 +311,7 @@ export class Garage {
   private currentName(lo: Loadout): string {
     const name = (list: { id: string; name: string }[], id: string) => list.find((x) => x.id === id)?.name ?? '';
     switch (this.tab) {
-      case 'Carrocería': return CAR_BODIES[lo.body].name;
+      case 'Carrocería': return BODY_DESC[lo.body] ?? CAR_BODIES[lo.body].name;
       case 'Pintura': return TEAM_PAINTS[this.team][lo.paint[this.team]].name;
       case 'Acabado': return name(FINISHES, lo.finish);
       case 'Calcomanía': return name(DECALS, lo.decal);

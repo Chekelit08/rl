@@ -39,10 +39,11 @@
 .ch-medal .ch-ico svg { width: 1.375rem; height: 1.375rem; }
 .ch-table { margin-top: 1rem; }
 .ch-table div { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem .75rem; border-bottom: 1px solid var(--line); box-shadow: inset .1875rem 0 0 var(--mc, transparent); font-size: .875rem; }
-.ch-table span { color: var(--ink-2); }
+.ch-table span { display: flex; align-items: center; gap: .5rem; color: var(--ink-2); }
+.ch-table span svg { width: .875rem; height: .875rem; color: var(--ok); }
 .ch-table b { font: 800 .9375rem/1.2 var(--display); font-variant-numeric: tabular-nums; }
 .ch-table .got { background: rgba(255, 255, 255, .04); }
-.ch-table .got b { color: var(--mc); }
+.ch-table .got span { color: var(--ink); font-weight: 700; }
 .ch-table .prev { box-shadow: none; }
 
 @media (max-width: 720px) {

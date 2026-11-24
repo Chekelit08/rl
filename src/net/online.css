@@ -14,9 +14,10 @@
 .on-help code { padding: .0625rem .3125rem; background: var(--sunk); border: 1px solid var(--line); font: 500 .75rem var(--mono); }
 .on-error { margin-top: .875rem; padding: .625rem .875rem; color: #ffd0d8; background: rgba(255, 51, 85, .12); border-left: .1875rem solid var(--red); font-size: .875rem; font-weight: 600; }
 .on-note { margin: 0 0 1rem; padding: .625rem .875rem; color: var(--ink-2); background: var(--sunk); border-left: .1875rem solid var(--muted); font-size: .875rem; }
-.on-cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: .75rem; align-items: stretch; }
+.on-cols { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: .75rem; align-items: stretch; }
 .on-box { display: flex; flex-direction: column; padding: 1.125rem 1.25rem 1.25rem; background: var(--sunk); border: 1px solid var(--line); }
-.on-box .row { grid-template-columns: 8.5rem 1fr; }
+.on-box .row { grid-template-columns: 7.25rem 1fr; }
+.on-box .seg button, .on-cfg .seg button { padding-inline: .75rem; }
 .on-box > .btn { align-self: flex-end; margin-top: auto; }
 .on-box .tip { margin-top: .625rem; font-size: .8125rem; }
 .on-join { display: flex; gap: .5rem; }
@@ -42,7 +43,7 @@
 .on-team .st { color: var(--muted); font: 700 .6875rem/1.2 var(--display); letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; }
 .on-team .st.ok { color: var(--ok); }
 .on-cfg { display: grid; grid-template-columns: 1fr 1fr; gap: 0 2rem; }
-.on-cfg .row { grid-template-columns: 8.5rem 1fr; }
+.on-cfg .row { grid-template-columns: 7.25rem 1fr; }
 
 /* Indicador de ping y pérdida (HUD) */
 .net-chip { position: absolute; top: 1rem; left: 1.125rem; display: flex; align-items: center; gap: .4375rem; padding: .375rem .625rem; color: var(--ink); background: rgba(10, 13, 19, .88); font: 700 .75rem/1.2 var(--display); font-variant-numeric: tabular-nums; letter-spacing: .04em; }

@@ -172,7 +172,7 @@ export class Challenges {
     const prev = loadBests()[c.id];
     const record = saveBest(c.id, t);
     const m = medalFor(c, t);
-    const row = (name: string, time: string, cls = '') => `<div class="${cls}"><span>${name}</span><b>${time}</b></div>`;
+    const row = (name: string, time: string, cls = '') => `<div class="${cls}"><span>${name}${cls.includes('got') ? icon('check', '') : ''}</span><b>${time}</b></div>`;
     this.result.innerHTML = `<div class="panel">
       <header class="panel-head"><h2>${c.name}</h2>${record ? '<div class="end"><span class="tag accent">Nuevo récord</span></div>' : ''}</header>
       <div class="ch-result m${m}">

@@ -4,10 +4,10 @@
 // No dependen de la forma de cada carrocería: el encuadre sale de su caja envolvente.
 
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { getLoadout, lookFromLoadout, type CarLook } from '../garage/loadout.ts';
 import { buildCar, disposeCar } from '../render/carMesh.ts';
 import { CAR_BODIES } from '../sim/constants.ts';
+import { aimStudioEnv, studioEnv } from './studio.ts';
 
 export const BODY_DESC = ['Equilibrado', 'Largo y bajo', 'Plano y ancho', 'Largo y fino', 'Híbrido', 'Alto, defensivo'];
 
@@ -29,10 +29,7 @@ function initKit() {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(0x000000, 0);
     const scene = new THREE.Scene();
-    const pm = new THREE.PMREMGenerator(renderer);
-    scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    pm.dispose();
-    scene.environmentIntensity = 0.75;
+    aimStudioEnv(scene, studioEnv(renderer), 1.1);
     const key = new THREE.DirectionalLight('#ffffff', 1.5);
     key.position.set(220, -320, 420);
     scene.add(key, new THREE.AmbientLight('#ffffff', 0.25));
