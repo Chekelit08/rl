@@ -1,4 +1,4 @@
-// Íconos SVG propios de los rangos (escudos con emblema por tier y pips de subnivel).
+// Íconos SVG propios de los rangos: escudo plano de tres tonos, emblema por rango y marcas de subnivel.
 
 import { TIER_COLORS, TIER_NAMES } from '../progression/ranked.ts';
 
@@ -19,29 +19,26 @@ function emblem(tier: number, c: string, dark: string): string {
     case 2: return chev(44) + chev(58) + chev(72);
     case 3: return `<path d="M50 24 L58 46 L80 50 L58 56 L50 80 L42 56 L20 50 L42 46 Z" fill="${c}"/><circle cx="50" cy="50" r="5" fill="${dark}"/>`;
     case 4: return `<path d="M30 40 L40 26 L60 26 L70 40 L50 78 Z" fill="${c}"/><path d="M30 40 L70 40 M40 26 L50 40 L60 26 M50 40 L50 78" stroke="${dark}" stroke-width="2" fill="none" opacity=".55"/>`;
-    case 5: return `<path d="M50 24 L74 38 L74 62 L50 76 L26 62 L26 38 Z" fill="${c}"/><path d="M50 34 L66 43 L66 58 L50 67 L34 58 L34 43 Z" fill="${dark}" opacity=".6"/><path d="M14 40 L26 46 L26 56 L16 60 Z M86 40 L74 46 L74 56 L84 60 Z" fill="${c}"/>`;
-    case 6: return `<path d="M24 66 L28 34 L40 48 L50 28 L60 48 L72 34 L76 66 Z" fill="${c}"/><rect x="24" y="68" width="52" height="7" rx="2" fill="${c}"/><circle cx="50" cy="56" r="4" fill="${dark}"/>`;
-    default: return `<g fill="${c}"><path d="M50 14 L58 40 L86 40 L63 56 L72 84 L50 67 L28 84 L37 56 L14 40 L42 40 Z"/></g><circle cx="50" cy="50" r="46" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="3 5" opacity=".8"/>`;
+    case 5: return `<path d="M50 24 L74 38 L74 62 L50 76 L26 62 L26 38 Z" fill="${c}"/><path d="M50 34 L66 43 L66 58 L50 67 L34 58 L34 43 Z" fill="${dark}" opacity=".6"/>`;
+    case 6: return `<path d="M24 66 L28 34 L40 48 L50 28 L60 48 L72 34 L76 66 Z" fill="${c}"/><rect x="24" y="68" width="52" height="7" fill="${c}"/><circle cx="50" cy="56" r="4" fill="${dark}"/>`;
+    default: return `<path d="M50 20 L57 41 L80 41 L61 54 L68 76 L50 62 L32 76 L39 54 L20 41 L43 41 Z" fill="${c}"/>`;
   }
 }
 
-/** SVG de un rango. sub: 0..2 (I–III) para los pips; -1 oculta los pips. */
-export function rankIcon(tier: number, sub = -1, size = 64, id = ''): string {
+/** SVG de un rango. sub: 0..2 (I–III) para las marcas de subnivel; -1 las oculta. El tamaño lo da el CSS (o `size`, en px). */
+export function rankIcon(tier: number, sub = -1, size = 0): string {
   const t = Math.max(0, Math.min(7, tier));
   const c = TIER_COLORS[t];
-  const dark = shade(c, 0.25);
-  const gid = `rg${t}${id}`;
+  const dark = shade(c, 0.2);
   const shape = t >= 5 ? SHIELD_WIDE : SHIELD;
   const pips = sub >= 0 && t < 7
-    ? [0, 1, 2].map((i) => `<circle cx="${38 + i * 12}" cy="90" r="3.4" fill="${i <= sub ? '#fff' : 'rgba(255,255,255,.18)'}"/>`).join('')
+    ? [0, 1, 2].map((i) => `<rect x="${33.5 + i * 12}" y="86" width="9" height="5" fill="${i <= sub ? '#fff' : 'rgba(255,255,255,.2)'}"/>`).join('')
     : '';
-  const glow = t >= 5 ? `<filter id="${gid}f"><feGaussianBlur stdDeviation="2.4"/></filter><path d="${shape}" fill="${c}" opacity=".55" filter="url(#${gid}f)"/>` : '';
-  return `<svg class="rank-icon" viewBox="0 0 100 104" width="${size}" height="${size * 1.04}" role="img" aria-label="${TIER_NAMES[t]}">
-    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(c, 1.25)}"/><stop offset=".55" stop-color="${c}"/><stop offset="1" stop-color="${shade(c, 0.55)}"/></linearGradient></defs>
-    ${glow}
-    <path d="${shape}" fill="${shade(c, 0.3)}"/>
-    <path d="${shape}" fill="url(#${gid})" transform="translate(50 52) scale(.9) translate(-50 -52)" opacity=".9"/>
-    <path d="${shape}" fill="${shade(c, 0.22)}" transform="translate(50 52) scale(.74) translate(-50 -52)"/>
-    ${emblem(t, shade(c, 1.35), dark)}${pips}
+  const dims = size ? ` width="${size}" height="${Math.round(size * 1.04)}"` : '';
+  return `<svg class="rank-icon" viewBox="0 0 100 104"${dims} role="img" aria-label="${TIER_NAMES[t]}">
+    <path d="${shape}" fill="${shade(c, 0.42)}"/>
+    <path d="${shape}" fill="${c}" transform="translate(50 52) scale(.88) translate(-50 -52)"/>
+    <path d="${shape}" fill="${dark}" transform="translate(50 52) scale(.73) translate(-50 -52)"/>
+    ${emblem(t, shade(c, 1.3), dark)}${pips}
   </svg>`;
 }

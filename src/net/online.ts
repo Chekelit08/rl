@@ -13,6 +13,8 @@ import type { GameEvent, Snapshot } from '../sim/world.ts';
 import { NetClient, type NetStatus } from './client.ts';
 import { OnlineMatch } from './match.ts';
 import { DEFAULT_PORT, type LobbyPlayer, normalizeCode, type RoomConfig, type ServerMsg } from './protocol.ts';
+import { feedLine, scorePanel, setTurboHud, statsTable } from '../ui/hud.ts';
+import type { IconName } from '../ui/icons.ts';
 import './online.css';
 
 /** Lo que el modo online necesita del juego (main.ts). */
@@ -199,10 +201,10 @@ export class OnlineMode {
     if (this.active) {
       for (const p of players) {
         const old = this.prevPlayers.find((x) => x.id === p.id);
-        if (old && old.connected && !p.connected) this.feed(`📡 ${p.name} se desconectó (lo maneja un bot)`, p.team);
-        if (old && !old.connected && p.connected) this.feed(`📡 ${p.name} volvió`, p.team);
+        if (old && old.connected && !p.connected) this.feed('net', `*${p.name}* se desconectó: lo maneja un bot`, p.team);
+        if (old && !old.connected && p.connected) this.feed('net', `*${p.name}* volvió`, p.team);
       }
-      for (const old of this.prevPlayers) if (!players.some((p) => p.id === old.id)) this.feed(`🚪 ${old.name} salió`, old.team);
+      for (const old of this.prevPlayers) if (!players.some((p) => p.id === old.id)) this.feed('exit', `*${old.name}* salió`, old.team);
     }
     this.prevPlayers = players;
   }
@@ -241,6 +243,9 @@ export class OnlineMode {
     this.render();
     this.host.showOnly('menu');
   }
+
+  /** true si está abierta la pantalla de inicio del online (sin sala): Esc la cierra desde main.ts. */
+  get atHome() { return !this.active && this.screen === 'home'; }
 
   private me(): LobbyPlayer | undefined { return this.room?.players.find((p) => p.id === this.room!.you); }
 
@@ -321,7 +326,7 @@ export class OnlineMode {
     if (table) {
       const show = ui.scoreboard && !this.paused && this.screen !== 'results';
       table.classList.toggle('hidden', !show);
-      if (show) byId('scoreTableInner')!.innerHTML = `<h2>Puntajes</h2>${this.statsTable()}`;
+      if (show) this.refreshScoreTable();
     }
   }
 
@@ -340,24 +345,24 @@ export class OnlineMode {
         a.goal();
         const scorer = ev.scorerId >= 0 ? w.cars[ev.scorerId] : null;
         const own = scorer && scorer.team !== ev.team;
-        this.setCenter('¡GOL!', 'pop goal' + ev.team, 2.8);
+        this.setCenter('¡Gol!', 'pop goal' + ev.team, 2.8);
         const kmh = Math.round(ev.speed * 0.036);
         const sub = byId('subcenter');
         if (sub) sub.textContent = scorer ? `${scorer.name}${own ? ' (en contra)' : ''} · ${kmh} km/h` : `${kmh} km/h`;
-        this.feed(scorer ? `⚽ ${scorer.name} anotó para ${TEAM_NAMES[ev.team]}` : `⚽ ¡Gol de ${TEAM_NAMES[ev.team]}!`, ev.team);
-        if (ev.assistId >= 0 && w.cars[ev.assistId]) this.feed(`🤝 Asistencia de ${w.cars[ev.assistId].name}`, ev.team);
+        this.feed('ball', scorer ? `Gol de *${scorer.name}*${own ? ' en contra' : ''}` : `¡Gol de ${TEAM_NAMES[ev.team]}!`, ev.team);
+        if (ev.assistId >= 0 && w.cars[ev.assistId]) this.feed('assist', `Asistencia de *${w.cars[ev.assistId].name}*`, ev.team);
         break;
       }
       case 'demo': {
         a.demo();
         const at = w.cars[ev.attacker], v = w.cars[ev.victim];
-        if (at && v) this.feed(`💥 ${at.name} demolió a ${v.name}`, at.team);
+        if (at && v) this.feed('demo', `*${at.name}* demolió a *${v.name}*`, at.team);
         break;
       }
       case 'bump': if (ev.attacker === me || ev.victim === me) a.bump(); break;
-      case 'save': if (w.cars[ev.carId]) this.feed(`🧤 ¡Atajada de ${w.cars[ev.carId].name}!`, w.cars[ev.carId].team); break;
-      case 'shot': if (w.cars[ev.carId]) this.feed(`🎯 Tiro de ${w.cars[ev.carId].name}`, w.cars[ev.carId].team); break;
-      case 'overtime': this.setCenter('TIEMPO EXTRA', 'pop', 2.5); a.whistle(); break;
+      case 'save': if (w.cars[ev.carId]) this.feed('save', `¡Atajada de *${w.cars[ev.carId].name}*!`, w.cars[ev.carId].team); break;
+      case 'shot': if (w.cars[ev.carId]) this.feed('shot', `Tiro de *${w.cars[ev.carId].name}*`, w.cars[ev.carId].team); break;
+      case 'overtime': this.setCenter('Tiempo extra', 'pop', 2.5); a.whistle(); break;
       case 'end': a.whistle(); break;
       // La cuenta regresiva sale del estado predicho (ver updateHud): llega a tiempo aunque haya ping
     }
@@ -378,16 +383,7 @@ export class OnlineMode {
 
   }
 
-  private feed(text: string, team: number) {
-    const f = byId('feed');
-    if (!f) return;
-    const d = document.createElement('div');
-    d.className = 'item t' + team;
-    d.textContent = text;
-    f.prepend(d);
-    while (f.children.length > 5) f.lastChild?.remove();
-    setTimeout(() => d.remove(), 6000);
-  }
+  private feed(kind: IconName, text: string, team: number) { feedLine(kind, text, team); }
 
   private toast(text: string) {
     const t = byId('toast');
@@ -406,11 +402,11 @@ export class OnlineMode {
       // Cuenta regresiva desde el estado predicho
       if (w.phase === 'countdown') {
         const n = Math.max(1, Math.ceil(w.phaseTimer));
-        if (n !== this.lastCount) { this.lastCount = n; this.host.audio.countdown(false); this.setCenter(String(n), 'pop', 1.2); }
+        if (n !== this.lastCount) { this.lastCount = n; this.host.audio.countdown(false); this.setCenter(String(n), 'pop count', 1.2); }
       } else if (this.lastPhase === 'countdown' && w.phase === 'playing') {
         this.lastCount = 0;
         this.host.audio.countdown(true);
-        this.setCenter('¡YA!', 'pop', 0.8);
+        this.setCenter('¡Ya!', 'pop go', 0.8);
       } else if (this.lastPhase === '') this.setCenter('');
       this.lastPhase = w.phase;
     }
@@ -423,14 +419,7 @@ export class OnlineMode {
     if (clock !== this.screenClock) { this.screenClock = clock; this.host.renderer.stadium.updateScreens(w.score, clock); }
     const me = w.cars[m.localId];
     if (me) {
-      const bn = byId('boostNum');
-      if (bn) bn.textContent = String(Math.round(me.boost));
-      const ring = document.getElementById('boostRing');
-      if (ring) ring.style.strokeDashoffset = String(314.16 * (1 - me.boost / 100));
-      const sc = byId('speedChip');
-      if (sc) sc.textContent = `${Math.round(me.speed() * 0.036)} km/h${me.supersonic ? ' · SUPERSÓNICO' : ''}`;
-      const cc = byId('camChip');
-      if (cc) cc.textContent = this.host.renderer.camCtl.ballCam ? 'CÁMARA: PELOTA' : 'CÁMARA: AUTO';
+      setTurboHud({ boost: me.boost, unlimited: me.unlimitedBoost, supersonic: me.supersonic, kmh: Math.round(me.speed() * 0.036), ballCam: this.host.renderer.camCtl.ballCam });
       this.host.audio.updateCar(me.speed(), me.isBoosting, me.supersonic, me.onGround, !this.paused);
     }
     // Indicador de red
@@ -451,12 +440,22 @@ export class OnlineMode {
     chip.title = `Jitter ${st.jitter} ms · margen ${st.slack} ticks · correcciones ${st.rollbacks} · ${(st.bytesPerSec / 1024).toFixed(1)} KB/s`;
   }
 
-  private statsTable() {
+  private scoreRows() {
+    return (this.match?.world.cars ?? []).map((c) => ({ id: c.id, name: c.name, team: c.team, isBot: c.isBot, stats: c.stats }));
+  }
+
+  private scoreKey = '';
+  /** Panel de puntajes (Tab): se vuelve a armar sólo cuando cambia algo. */
+  private refreshScoreTable() {
     const m = this.match;
-    if (!m) return '';
-    const rows = [...m.world.cars].sort((a, b) => a.team - b.team || b.stats.score - a.stats.score).map((c) =>
-      `<tr class="t${c.team}${c.id === m.localId ? ' me' : ''}"><td>${esc(c.name)}${c.isBot ? ' <small>BOT</small>' : ''}</td><td>${c.stats.score}</td><td>${c.stats.goals}</td><td>${c.stats.assists}</td><td>${c.stats.saves}</td><td>${c.stats.shots}</td><td>${c.stats.demos}</td><td>${c.stats.touches}</td></tr>`).join('');
-    return `<table class="stats"><tr><th>Jugador</th><th>Puntos</th><th>Goles</th><th>Asist.</th><th>Atajadas</th><th>Tiros</th><th>Demos</th><th>Toques</th></tr>${rows}</table>`;
+    const inner = byId('scoreTableInner');
+    if (!m || !inner) return;
+    const w = m.world;
+    const clock = fmtClock(w.clock, w.overtime);
+    const key = clock + '|' + w.score.join('-') + '|' + w.cars.map((c) => `${c.stats.score},${c.stats.touches},${c.stats.shots},${c.stats.saves}`).join(';');
+    if (key === this.scoreKey) return;
+    this.scoreKey = key;
+    inner.innerHTML = scorePanel(this.scoreRows(), m.localId, w.score, clock, true);
   }
 
   // ---------- Pantallas ----------
@@ -537,15 +536,19 @@ export class OnlineMode {
       `<button data-on="${act}:${v}" class="${v === cur ? 'on' : ''}"${disabled ? ' disabled' : ''}>${l}</button>`).join('')}</div>`;
   }
 
+  /** Estado de la conexión, en una línea. */
   private statusLine() {
     const url = this.net?.url || serverUrl();
     const s = this.status;
     const txt = s === 'open' ? `Conectado · <span id="onRtt">${Math.round(this.net?.rtt ?? 0)} ms</span>`
       : s === 'connecting' ? 'Conectando…' : s === 'reconnecting' ? 'Reconectando…' : 'Sin conexión';
-    const help = s === 'reconnecting' || s === 'closed'
-      ? `<div class="on-help">No se encuentra el servidor de juego. Para jugar en red, alguien tiene que iniciarlo con <code>npm run server</code> (en la misma red local o desplegado; ver docs/05-online.md) y, si no es esta compu, poner su dirección en Ajustes o en el enlace con <code>?server=ws://IP:8787</code>.</div>`
-      : '';
-    return `<div class="on-status ${s}"><i></i>${txt}<span class="url">${esc(url)}</span>${s === 'closed' ? '<button class="linkbtn" data-on="retry">Reintentar</button>' : ''}</div>${help}`;
+    return `<div class="on-status ${s}"><i></i><b>${txt}</b><span class="url">${esc(url)}</span>${s === 'closed' ? '<button class="linkbtn" data-on="retry">Reintentar</button>' : ''}</div>`;
+  }
+
+  /** Ayuda cuando no aparece el servidor de juego. */
+  private helpBox() {
+    if (this.status !== 'reconnecting' && this.status !== 'closed') return '';
+    return `<div class="on-help"><b>No aparece el servidor de juego.</b> Para jugar en red alguien tiene que iniciarlo con <code>npm run server</code> (en la misma red o desplegado: ver docs/05-online.md). Si no corre en esta compu, poné su dirección en Ajustes › Juego o agregá <code>?server=ws://IP:8787</code> al enlace.</div>`;
   }
 
   private lastHtml = '';
@@ -573,23 +576,28 @@ export class OnlineMode {
     root.classList.toggle('in-match', this.active);
     if (!scr) { this.setHtml(root, ''); return; }
     const err = this.lastError ? `<div class="on-error">${esc(this.lastError)}</div>` : '';
+    const off = this.status !== 'open' ? 'disabled' : '';
     if (scr === 'home') {
       const c = this.createCfg;
-      this.setHtml(root, `<div class="panel">
-        <h2>Online</h2>
-        ${this.statusLine()}
-        <div class="row"><label for="onName">Tu nombre</label><input id="onName" type="text" maxlength="16" value="${esc(this.playerName())}" autocomplete="off"></div>
-        <div class="on-box">
-          <h3>Crear sala</h3>
-          <div class="row"><label>Modo</label>${this.seg('cTeam', [[1, '1v1'], [2, '2v2'], [3, '3v3']], c.teamSize)}</div>
-          <div class="row"><label>Duración</label>${this.seg('cTime', [[180, '3 min'], [300, '5 min'], [600, '10 min']], c.duration)}</div>
-          <div class="row"><label>Completar con bots</label>${this.seg('cBots', [[1, 'Sí'], [0, 'No']], c.botFill ? 1 : 0)}</div>
-          <div class="row"><label>Bots</label>${this.seg('cDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], c.botDifficulty)}</div>
-          <div class="actions"><button class="btn primary" data-on="create" ${this.status !== 'open' ? 'disabled' : ''}>Crear sala</button></div>
-        </div>
-        <div class="on-box">
-          <h3>Unirme con código</h3>
-          <div class="on-join"><input id="onCode" type="text" maxlength="5" placeholder="ABCDE" autocomplete="off" spellcheck="false"><button class="btn primary" data-on="join" ${this.status !== 'open' ? 'disabled' : ''}>Unirme</button></div>
+      this.setHtml(root, `<div class="panel wide">
+        <header class="panel-head"><h2>Online</h2><p class="sub">Salas privadas: creá una y pasale el código o el enlace a tus amigos.</p></header>
+        ${this.statusLine()}${this.helpBox()}
+        <div class="on-cols">
+          <section class="on-box">
+            <h3>Crear sala</h3>
+            <div class="row"><label>Modo</label>${this.seg('cTeam', [[1, '1v1'], [2, '2v2'], [3, '3v3']], c.teamSize)}</div>
+            <div class="row"><label>Duración</label>${this.seg('cTime', [[180, '3 min'], [300, '5 min'], [600, '10 min']], c.duration)}</div>
+            <div class="row"><label>Bots de relleno</label>${this.seg('cBots', [[1, 'Sí'], [0, 'No']], c.botFill ? 1 : 0)}</div>
+            <div class="row"><label>Nivel de bots</label>${this.seg('cDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], c.botDifficulty)}</div>
+            <button class="btn primary" data-on="create" ${off}>Crear sala</button>
+          </section>
+          <section class="on-box">
+            <h3>Tu nombre</h3>
+            <input id="onName" class="txt" type="text" maxlength="16" value="${esc(this.playerName())}" autocomplete="off" spellcheck="false" aria-label="Tu nombre">
+            <h3>Unirme con código</h3>
+            <div class="on-join"><input id="onCode" class="txt" type="text" maxlength="5" placeholder="ABCDE" autocomplete="off" spellcheck="false" aria-label="Código de la sala"><button class="btn primary" data-on="join" ${off}>Unirme</button></div>
+            <p class="tip">Son 5 letras. Las ve quien creó la sala, arriba de todo.</p>
+          </section>
         </div>
         ${err}
         <div class="actions"><button class="btn" data-on="back">Volver</button></div>
@@ -601,40 +609,40 @@ export class OnlineMode {
       const teamCol = (t: number) => {
         const ps = r.players.filter((p) => p.team === t);
         const slots: string[] = ps.map((p) => `<li class="${p.id === r.you ? 'me' : ''}${p.connected ? '' : ' off'}">
-          <span class="nm">${p.host ? '<b title="Anfitrión">★</b> ' : ''}${esc(p.name)}</span>
-          <span class="st ${p.ready || p.host ? 'ok' : ''}">${!p.connected ? 'desconectado' : p.host ? 'anfitrión' : p.ready ? 'listo' : 'esperando'}</span></li>`);
-        for (let i = ps.length; i < cfg.teamSize; i++) slots.push(`<li class="empty"><span class="nm">${cfg.botFill ? 'Bot' : 'Libre'}</span><span class="st">${cfg.botFill ? DIFF_NAMES[cfg.botDifficulty] : ''}</span></li>`);
+          <span class="nm">${esc(p.name)}${p.id === r.you ? '<span class="tag accent">Vos</span>' : ''}${p.host ? '<span class="tag">Anfitrión</span>' : ''}</span>
+          <span class="st ${p.connected && (p.ready || p.host) ? 'ok' : ''}">${!p.connected ? 'Desconectado' : p.ready || p.host ? 'Listo' : 'Esperando'}</span></li>`);
+        for (let i = ps.length; i < cfg.teamSize; i++) slots.push(`<li class="empty"><span class="nm">${cfg.botFill ? `Bot ${DIFF_NAMES[cfg.botDifficulty].toLowerCase()}` : 'Lugar libre'}</span><span class="st"></span></li>`);
         const canSwitch = me && me.team !== t && ps.length < cfg.teamSize && r.state === 'lobby';
-        return `<div class="on-team t${t}"><div class="th">${TEAM_NAMES[t].toUpperCase()}${canSwitch ? `<button class="linkbtn" data-on="team:${t}">Pasarme</button>` : ''}</div><ul>${slots.join('')}</ul></div>`;
+        return `<div class="on-team t${t}"><div class="th"><span>${TEAM_NAMES[t]}</span><small>${ps.length} de ${cfg.teamSize}</small>${canSwitch ? `<button class="btn small" data-on="team:${t}">Pasarme</button>` : ''}</div><ul>${slots.join('')}</ul></div>`;
       };
       const others = r.players.filter((p) => !p.host && p.connected);
       const allReady = others.every((p) => p.ready);
       const playing = r.state !== 'lobby';
       this.setHtml(root, `<div class="panel wide">
-        <div class="on-head"><h2>Sala <span class="code" id="onRoomCode">${r.code}</span></h2>
-          <div class="on-share"><button class="linkbtn" data-on="copy">Copiar enlace</button><span id="onCopied"></span></div></div>
-        ${this.statusLine()}
-        ${playing ? '<div class="on-note">Hay un partido en curso: vas a jugar en el próximo.</div>' : ''}
+        <header class="panel-head"><h2>Sala <span class="code" id="onRoomCode">${r.code}</span></h2>
+          <div class="end"><span class="on-copied" id="onCopied"></span><button class="btn small" data-on="copy">Copiar enlace</button></div></header>
+        ${this.statusLine()}${this.helpBox()}
+        ${playing ? '<div class="on-note">Hay un partido en curso: entrás en el próximo.</div>' : ''}
         <div class="on-teams">${teamCol(0)}${teamCol(1)}</div>
+        <h3>Reglas${isHost ? '' : '<b>Las elige el anfitrión</b>'}</h3>
         <div class="on-cfg">
           <div class="row"><label>Modo</label>${this.seg('rTeam', [[1, '1v1'], [2, '2v2'], [3, '3v3']], cfg.teamSize, !isHost || playing)}</div>
           <div class="row"><label>Duración</label>${this.seg('rTime', [[180, '3 min'], [300, '5 min'], [600, '10 min']], cfg.duration, !isHost || playing)}</div>
-          <div class="row"><label>Completar con bots</label>${this.seg('rBots', [[1, 'Sí'], [0, 'No']], cfg.botFill ? 1 : 0, !isHost || playing)}</div>
-          <div class="row"><label>Bots</label>${this.seg('rDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], cfg.botDifficulty, !isHost || playing)}</div>
+          <div class="row"><label>Bots de relleno</label>${this.seg('rBots', [[1, 'Sí'], [0, 'No']], cfg.botFill ? 1 : 0, !isHost || playing)}</div>
+          <div class="row"><label>Nivel de bots</label>${this.seg('rDiff', [[0, DIFF_NAMES[0]], [1, DIFF_NAMES[1]], [2, DIFF_NAMES[2]]], cfg.botDifficulty, !isHost || playing)}</div>
         </div>
         ${err}
         <div class="actions">
           <button class="btn" data-on="leave">Salir de la sala</button>
           ${isHost
-            ? `<button class="btn primary" data-on="start" id="onStart" ${playing || !allReady ? 'disabled' : ''}>${allReady ? 'Empezar partido' : 'Esperando que estén listos'}</button>`
-            : `<button class="btn ${me?.ready ? '' : 'primary'}" data-on="ready" id="onReady" ${playing ? 'disabled' : ''}>${me?.ready ? 'No estoy listo' : '¡Estoy listo!'}</button>`}
+            ? `<button class="btn primary" data-on="start" id="onStart" ${playing || !allReady ? 'disabled' : ''}>${allReady ? 'Empezar partido' : 'Faltan jugadores listos'}</button>`
+            : `<button class="btn ${me?.ready ? '' : 'primary'}" data-on="ready" id="onReady" ${playing ? 'disabled' : ''}>${me?.ready ? 'Todavía no' : '¡Estoy listo!'}</button>`}
         </div>
       </div>`);
       return;
     }
     if (scr === 'pause') {
-      this.setHtml(root, `<div class="panel narrow"><h2>Partido online</h2>
-        <p class="on-note">El partido sigue corriendo mientras estás en este menú.</p>
+      this.setHtml(root, `<div class="panel narrow"><header class="panel-head"><h2>Partido online</h2><p class="sub">El partido sigue mientras tenés este menú abierto.</p></header>
         <div class="menu-buttons">
           <button class="btn primary" data-on="resume">Seguir jugando</button>
           <button class="btn" data-on="abandon">Abandonar partido</button>
@@ -646,10 +654,14 @@ export class OnlineMode {
       const myTeam = this.match.roster[this.match.localId]?.team ?? 0;
       const score = e?.score ?? this.match.world.score;
       const winner = e?.winner ?? this.match.world.winner;
-      const title = winner === myTeam ? '¡Victoria!' : winner < 0 ? 'Empate' : 'Derrota';
-      this.setHtml(root, `<div class="panel wide"><h2 id="onResult">${title}</h2>
-        <div class="endscore"><span class="b">${score[0]}</span> – <span class="r">${score[1]}</span></div>
-        ${this.statsTable()}
+      const cls = winner === myTeam ? 'win' : winner < 0 ? 'draw' : 'loss';
+      const title = cls === 'win' ? '¡Victoria!' : cls === 'draw' ? 'Empate' : 'Derrota';
+      this.setHtml(root, `<div class="panel xl pm-res ${cls}">
+        <header class="pm-head">
+          <div class="pm-result"><span class="pm-title" id="onResult">${title}</span><span class="pm-sub">Online · Sala ${esc(this.room?.code ?? '')}</span></div>
+          <div class="pm-score"><span class="n">${TEAM_NAMES[0]}</span><b class="b">${score[0]}</b><b class="r">${score[1]}</b><span class="n">${TEAM_NAMES[1]}</span></div>
+        </header>
+        ${statsTable(this.scoreRows(), this.match.localId, { bots: true })}
         <div class="actions">
           <button class="btn" data-on="abandon">Salir</button>
           <button class="btn primary" data-on="toLobby">Volver a la sala</button>
@@ -663,13 +675,13 @@ export class OnlineMode {
   // ---------- Ajustes: URL del servidor ----------
 
   private injectSettingsRow() {
-    const panel = document.querySelector('#settings .panel');
-    const actions = panel?.querySelector('.actions');
-    if (!panel || !actions || byId('onServerRow')) return;
+    // Va en el espacio que Ajustes reserva para otros módulos; main.ts lo muestra sólo en la pestaña "Juego"
+    const holder = byId('settingsExtra');
+    if (!holder || byId('onServerRow')) return;
     const row = document.createElement('div');
     row.className = 'row online-server';
     row.id = 'onServerRow';
-    row.innerHTML = `<label for="onServer">Servidor online</label><input id="onServer" type="text" spellcheck="false" autocomplete="off">`;
+    row.innerHTML = `<label for="onServer">Servidor online</label><input id="onServer" class="txt" type="text" spellcheck="false" autocomplete="off">`;
     const input = row.querySelector('input')!;
     input.placeholder = defaultServerUrl(location);
     input.value = store.get(LS_SERVER);
@@ -681,6 +693,6 @@ export class OnlineMode {
       // La próxima vez que se abra el online se conecta al nuevo servidor
       if (this.net && !this.active) { this.net.close(); this.net = null; this.room = null; this.screen = null; }
     });
-    panel.insertBefore(row, actions);
+    holder.append(row);
   }
 }

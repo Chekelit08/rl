@@ -12,6 +12,9 @@ export interface FreeplayInfo {
   launchKmh: number;
 }
 
+/** Línea de atajos: cada tecla en su casilla, seguida de lo que hace. */
+const keys = (list: [string, string][]) => list.map(([k, what]) => `<span>${k.split(' ').map((x) => `<kbd>${x}</kbd>`).join('')}${what}</span>`).join('');
+
 export class ExtrasHud {
   readonly root: HTMLDivElement;
   private panel: HTMLDivElement;
@@ -34,7 +37,7 @@ export class ExtrasHud {
     this.chips = el('div', 'tg-fchips');
     this.banner = el('div', 'tg-banner hidden');
     this.keys = el('div', 'tg-keys');
-    this.rewind = el('div', 'tg-rewind hidden', '<span>◀◀ REBOBINANDO</span><div class="tg-rbar"><i></i></div>');
+    this.rewind = el('div', 'tg-rewind hidden', '<span>Rebobinando</span><div class="tg-rbar"><i></i></div>');
     this.rewindBar = this.rewind.querySelector('i')!;
     this.panel.append(this.dots, tb);
     this.root.append(this.panel, this.chips, this.banner, this.rewind, this.keys);
@@ -72,12 +75,12 @@ export class ExtrasHud {
       this.lastKey = key;
       const p = s.pack;
       const head = `<div class="tg-thead"><b>${esc(p.name)}</b><span>${CATEGORY_NAMES[p.category]} · ${DIFFICULTY_LABELS[p.difficulty]}</span></div>` +
-        `<div class="tg-shot">TIRO ${s.index + 1}/${s.total}<span class="tg-hits">✓ ${s.hits}</span></div>`;
+        `<div class="tg-shot">Tiro ${s.index + 1} de ${s.total}<span class="tg-hits">${s.hits} ${s.hits === 1 ? 'acierto' : 'aciertos'}</span></div>`;
       const dots = s.results.map((r, i) => `<i class="${r === 'acierto' ? 'ok' : r === 'fallo' ? 'bad' : ''}${i === s.index ? ' cur' : ''}"></i>`).join('');
       const note = s.shot.note ? `<div class="tg-note">${esc(s.shot.note)}</div>` : '';
       const wait = s.phase === 'esperando' ? '<div class="tg-wait">Movete para arrancar el tiro</div>' : '';
       this.dots.innerHTML = head + `<div class="tg-dotrow">${dots}</div>` + note + wait;
-      this.keys.innerHTML = 'R reintentar · N / B siguiente / anterior · Z (mantener) rebobinar · G clip · Esc ' + (testing ? 'pausa (volver al editor)' : 'pausa');
+      this.keys.innerHTML = keys([['R', 'Reintentar'], ['N B', 'Siguiente / anterior'], ['Z', 'Rebobinar'], ['G', 'Guardar clip'], ['Esc', testing ? 'Pausa y volver al editor' : 'Pausa']]);
     }
     const frac = s.phase === 'jugando' ? Math.min(1, s.timer / s.timeLimit) : s.phase === 'esperando' ? 0 : 1;
     this.bar.style.width = `${(1 - frac) * 100}%`;
@@ -92,10 +95,10 @@ export class ExtrasHud {
     if (key === this.lastKey) return;
     this.lastKey = key;
     this.chips.innerHTML =
-      `<div class="chip">PELOTA ${Math.round(f.ballKmh)} km/h</div>` +
-      `<div class="chip dim">ÚLTIMO TOQUE ${f.touchKmh > 0 ? Math.round(f.touchKmh) + ' km/h' : '—'}</div>` +
-      (f.frozen ? '<div class="chip on">PELOTA CONGELADA</div>' : '') +
-      (f.unlimited ? '<div class="chip on">TURBO ∞</div>' : '');
-    this.keys.innerHTML = `R reiniciar · F congelar pelota · V lanzar pelota (${f.launchKmh} km/h) · I turbo infinito · Z (mantener) rebobinar · G clip · Esc pausa`;
+      `<div class="chip">Pelota ${Math.round(f.ballKmh)} km/h</div>` +
+      `<div class="chip dim">Último toque ${f.touchKmh > 0 ? Math.round(f.touchKmh) + ' km/h' : '—'}</div>` +
+      (f.frozen ? '<div class="chip on">Pelota congelada</div>' : '') +
+      (f.unlimited ? '<div class="chip on">Turbo infinito</div>' : '');
+    this.keys.innerHTML = keys([['R', 'Reiniciar'], ['F', 'Congelar pelota'], ['V', `Lanzarla a ${f.launchKmh} km/h`], ['I', 'Turbo infinito'], ['Z', 'Rebobinar'], ['G', 'Guardar clip'], ['Esc', 'Pausa']]);
   }
 }

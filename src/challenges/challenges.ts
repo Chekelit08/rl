@@ -5,6 +5,7 @@ import './challenges.css';
 import type { GameRenderer } from '../render/renderer.ts';
 import type { MatchConfig, World } from '../sim/world.ts';
 import { ChallengeRun, type Course, COURSES, fmtTime, loadBests, MEDAL_NAMES, medalFor, saveBest } from './courses.ts';
+import { icon } from '../ui/icons.ts';
 
 export interface ChallengeHost {
   renderer: GameRenderer;
@@ -15,7 +16,8 @@ export interface ChallengeHost {
 }
 
 const COL_NEXT = 0xffc21a, COL_AHEAD = 0x38a8ff;
-const MEDAL_ICON = ['—', '🥉', '🥈', '🥇'];
+/** Medalla como ícono plano del color que corresponde (m0 = sin medalla). */
+const medal = (m: number) => `<span class="ch-ico m${m}">${icon('medal', '')}</span>`;
 
 export class Challenges {
   run: ChallengeRun | null = null;
@@ -66,21 +68,24 @@ export class Challenges {
   openMenu() {
     this.host.showOnly(null);
     const bests = loadBests();
-    this.menu.innerHTML = `<div class="panel wide"><h2>Desafíos</h2>
-      <p class="ch-intro">Recorridos contrarreloj dentro del estadio. Pasá por todos los aros en orden; <b>R</b> te devuelve al último aro.</p>
+    this.menu.innerHTML = `<div class="panel wide">
+      <header class="panel-head"><h2>Desafíos</h2><p class="sub">Recorridos contrarreloj dentro del estadio. Pasá por todos los aros en orden; con <kbd>R</kbd> volvés al último.</p></header>
       <div class="ch-list">${COURSES.map((c) => {
         const b = bests[c.id];
         const m = b !== undefined ? medalFor(c, b) : 0;
-        return `<button class="ch-card" data-ch="${c.id}">
-          <span class="ch-kind k-${c.kind.toLowerCase()}">${c.kind}</span>
+        return `<button class="card ch-card" data-ch="${c.id}">
+          <span class="ch-top"><span class="tag k-${c.kind.toLowerCase()}">${c.kind}</span>${b !== undefined ? `<span class="ch-best">${medal(m)}${fmtTime(b)}</span>` : '<span class="ch-best none">Sin tiempo</span>'}</span>
           <b>${c.name}</b><small>${c.desc}</small>
-          <span class="ch-meta">${c.gates.length} aros · ${c.unlimitedBoost ? 'turbo ilimitado' : 'turbo de pastillas'} · oro ${fmtTime(c.medals[0])}</span>
-          <span class="ch-best">${b !== undefined ? `${MEDAL_ICON[m]} Mejor: ${fmtTime(b)}` : 'Sin tiempo todavía'}</span>
+          <span class="ch-meta"><span>${c.gates.length} aros</span><span>${c.unlimitedBoost ? 'Turbo ilimitado' : 'Turbo de pastillas'}</span></span>
+          <span class="ch-medals">${['Oro', 'Plata', 'Bronce'].map((n, i) => `<span class="m${3 - i}${m >= 3 - i ? ' got' : ''}">${n}<b>${fmtTime(c.medals[i])}</b></span>`).join('')}</span>
         </button>`;
       }).join('')}</div>
       <div class="actions"><button class="btn" data-ch="back">Volver</button></div></div>`;
     this.menu.classList.remove('hidden');
   }
+
+  /** true mientras se ve la lista de desafíos. */
+  get menuOpen() { return !this.menu.classList.contains('hidden'); }
 
   closeMenu() {
     this.menu.classList.add('hidden');
@@ -167,13 +172,17 @@ export class Challenges {
     const prev = loadBests()[c.id];
     const record = saveBest(c.id, t);
     const m = medalFor(c, t);
-    this.result.innerHTML = `<div class="panel"><h2>${c.name}</h2>
-      <div class="ch-time">${fmtTime(t)}</div>
-      <div class="ch-medal m${m}">${MEDAL_ICON[m]} ${MEDAL_NAMES[m]}${record ? ' · ¡Nuevo récord!' : ''}</div>
-      <table class="ch-table">
-        <tr><td>Oro</td><td>${fmtTime(c.medals[0])}</td></tr><tr><td>Plata</td><td>${fmtTime(c.medals[1])}</td></tr><tr><td>Bronce</td><td>${fmtTime(c.medals[2])}</td></tr>
-        <tr><td>Tu mejor anterior</td><td>${prev !== undefined ? fmtTime(prev) : '—'}</td></tr>
-      </table>
+    const row = (name: string, time: string, cls = '') => `<div class="${cls}"><span>${name}${cls.includes('got') ? icon('check', '') : ''}</span><b>${time}</b></div>`;
+    this.result.innerHTML = `<div class="panel">
+      <header class="panel-head"><h2>${c.name}</h2>${record ? '<div class="end"><span class="tag accent">Nuevo récord</span></div>' : ''}</header>
+      <div class="ch-result m${m}">
+        <div class="ch-time">${fmtTime(t)}</div>
+        <div class="ch-medal">${medal(m)}${m ? `Medalla de ${MEDAL_NAMES[m].toLowerCase()}` : 'Sin medalla esta vez'}</div>
+      </div>
+      <div class="ch-table">
+        ${row('Oro', fmtTime(c.medals[0]), `m3${m >= 3 ? ' got' : ''}`)}${row('Plata', fmtTime(c.medals[1]), `m2${m >= 2 ? ' got' : ''}`)}${row('Bronce', fmtTime(c.medals[2]), `m1${m >= 1 ? ' got' : ''}`)}
+        ${row('Tu mejor tiempo anterior', prev !== undefined ? fmtTime(prev) : '—', 'prev')}
+      </div>
       <div class="actions"><button class="btn" data-act="quit">Menú</button><button class="btn" data-ch="list">Otro desafío</button><button class="btn primary" data-ch="retry">Reintentar</button></div></div>`;
     this.result.classList.remove('hidden');
     document.exitPointerLock?.();
@@ -241,9 +250,19 @@ export class Challenges {
       pos.setXYZ(1, next.p.x, next.p.y, next.p.z);
       pos.needsUpdate = true;
     }
+    // HUD: la estructura se arma cuando cambia algo; el reloj sólo actualiza su texto
     const best = loadBestCached(run.course.id);
-    this.hud.innerHTML = `<span class="ch-name">${run.course.name}</span><span class="ch-count">${Math.min(run.index + (run.finished ? 0 : 1), run.gates.length)}<small>/${run.gates.length}</small></span><span class="ch-clock">${fmtTime(run.time)}</span><span class="ch-pb">${best !== undefined ? `Mejor ${fmtTime(best)}` : 'Oro ' + fmtTime(run.course.medals[0])}</span>`;
+    const gate = Math.min(run.index + (run.finished ? 0 : 1), run.gates.length);
+    const key = `${run.course.id}|${gate}|${best}`;
+    if (key !== this.hudKey) {
+      this.hudKey = key;
+      this.hud.innerHTML = `<span class="ch-name">${run.course.name}</span><span class="ch-count"><small>Aro</small>${gate}<small>/ ${run.gates.length}</small></span><span class="ch-clock"></span><span class="ch-pb"><small>${best !== undefined ? 'Mejor' : 'Oro'}</small>${fmtTime(best ?? run.course.medals[0])}</span>`;
+      this.hudClock = this.hud.querySelector('.ch-clock');
+    }
+    if (this.hudClock) this.hudClock.textContent = fmtTime(run.time);
   }
+  private hudKey = '';
+  private hudClock: HTMLElement | null = null;
 }
 
 let bestCache: { at: number; data: Record<string, number> } | null = null;

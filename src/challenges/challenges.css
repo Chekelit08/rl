@@ -1,34 +1,53 @@
-/* Desafíos y mutadores */
-.ch-intro { color: var(--muted); margin: -8px 0 16px; font-size: 15px; }
-.ch-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.ch-card { pointer-events: auto; display: grid; gap: 5px; text-align: left; font-family: var(--text); color: var(--ink); background: rgba(20,32,56,.9); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: transform .12s ease, border-color .12s; }
-.ch-card:hover, .ch-card:focus-visible { transform: translateY(-2px); border-color: rgba(140,180,255,.6); outline: none; }
-.ch-card b { font-family: var(--display); font-size: 21px; letter-spacing: .5px; }
-.ch-card small { color: var(--muted); font-size: 14px; line-height: 1.35; }
-.ch-kind { justify-self: start; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; background: rgba(56,168,255,.22); color: #9fd2ff; }
-.ch-kind.k-slalom { background: rgba(255,194,26,.2); color: #ffd870; }
-.ch-kind.k-pared { background: rgba(255,90,120,.2); color: #ffa3b5; }
-.ch-meta { font-size: 13px; color: var(--muted); }
-.ch-best { font-weight: 800; font-size: 15px; }
+/* Desafíos: lista de recorridos, HUD de la corrida y resultado. */
+.ch-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; }
+.ch-card { display: grid; align-content: start; gap: .375rem; padding: 1rem 1.125rem 1.0625rem; }
+.ch-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.5rem; }
+.ch-card > b { margin-top: .25rem; font: 800 1.25rem/1.15 var(--display); font-stretch: 110%; }
+.ch-card > small { min-height: 2.5rem; color: var(--muted); font-size: .8125rem; line-height: 1.4; }
+.ch-meta { display: flex; gap: .375rem; margin-top: .125rem; }
+.ch-meta span { padding: .1875rem .4375rem; color: var(--ink-2); background: var(--panel-3); font-size: .75rem; font-weight: 600; }
+.ch-medals { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: .5rem; border: 1px solid var(--line-2); }
+.ch-medals span { display: grid; gap: .125rem; padding: .4375rem .625rem .5rem; color: var(--muted); border-top: .1875rem solid var(--mc); font: 700 .625rem/1.2 var(--display); letter-spacing: .14em; text-transform: uppercase; }
+.ch-medals span + span { border-left: 1px solid var(--line-2); }
+.ch-medals b { color: var(--ink); font: 800 .9375rem/1.2 var(--display); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.ch-medals .got { background: rgba(255, 255, 255, .05); }
+.ch-medals .got b { color: var(--mc); }
+.m3 { --mc: #ffcf4a; } .m2 { --mc: #c8d2df; } .m1 { --mc: #dd9258; } .m0 { --mc: var(--muted); }
+.ch-best { display: flex; align-items: center; gap: .375rem; font: 800 .9375rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.ch-best.none { color: var(--muted); font: 600 .78125rem var(--text); }
+.ch-ico { display: inline-grid; color: var(--mc); }
+.ch-ico svg { width: 1.125rem; height: 1.125rem; }
+.tag.k-anillos { color: #cfe5ff; background: rgba(46, 139, 255, .28); }
+.tag.k-slalom { color: var(--accent-ink); background: var(--accent); }
+.tag.k-pared { color: #ffd3db; background: rgba(255, 51, 85, .28); }
+
+/* HUD de la corrida */
 .challenge .scoreboard, .challenge #camChip { display: none; }
-.ch-hud { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; align-items: baseline; background: rgba(4,8,16,.72); border: 1px solid var(--line); border-radius: 10px; padding: 7px 18px; font-weight: 700; white-space: nowrap; }
-.ch-hud .ch-name { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-.ch-hud .ch-count { font-family: var(--display); font-size: 24px; color: #ffc21a; }
-.ch-hud .ch-count small { font-size: 15px; color: var(--muted); }
-.ch-hud .ch-clock { font-family: var(--display); font-size: 26px; font-variant-numeric: tabular-nums; min-width: 96px; text-align: center; }
-.ch-hud .ch-pb { color: var(--muted); font-size: 14px; }
-.ch-time { font-family: var(--display); font-size: 64px; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
-.ch-medal { text-align: center; font-weight: 800; font-size: 20px; margin: 8px 0 16px; }
-.ch-medal.m3 { color: #ffd24a; } .ch-medal.m2 { color: #cfd8e6; } .ch-medal.m1 { color: #e0975a; } .ch-medal.m0 { color: var(--muted); }
-.ch-table { width: 100%; border-collapse: collapse; }
-.ch-table td { padding: 6px 4px; border-top: 1px solid var(--line); }
-.ch-table td:last-child { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
-.mutators { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 6px; }
-.mutators summary { pointer-events: auto; cursor: pointer; font-weight: 800; font-size: 16px; }
-.mutators summary span { color: #ffc21a; font-weight: 700; margin-left: 6px; }
-.mutators #mutRows { margin-top: 14px; }
-.mutators .row { grid-template-columns: 150px 1fr; margin-bottom: 10px; }
-.mutators .seg button { font-size: 14px; padding: 6px 10px; }
-.mut-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.btn.small { font-size: 13px; padding: 8px 12px; }
-@media (max-width: 720px) { .ch-list { grid-template-columns: 1fr; } }
+.ch-hud { position: absolute; top: 1rem; left: 50%; display: flex; align-items: stretch; transform: translateX(-50%); font-family: var(--display); white-space: nowrap; box-shadow: 0 0 0 1px rgba(5, 7, 11, .5); }
+.ch-hud > span { display: flex; align-items: baseline; gap: .4375rem; padding: .5625rem 1rem; background: var(--bg); }
+.ch-hud small { color: var(--muted); font: 700 .6875rem/1 var(--display); letter-spacing: .14em; text-transform: uppercase; }
+.ch-hud .ch-name { align-items: center; color: var(--ink-2); background: var(--panel-2); font: 700 .75rem/1 var(--display); letter-spacing: .14em; text-transform: uppercase; }
+.ch-hud .ch-count { color: var(--accent-ink); background: var(--accent); font: 800 1.625rem/1 var(--display); font-stretch: 110%; font-variant-numeric: tabular-nums; }
+.ch-hud .ch-count small { color: rgba(23, 18, 4, .7); }
+.ch-hud .ch-clock { justify-content: center; min-width: 8.5rem; font: 800 1.625rem/1 var(--display); font-stretch: 110%; font-variant-numeric: tabular-nums; }
+.ch-hud .ch-pb { align-items: center; color: var(--ink-2); background: var(--panel-2); font: 700 .9375rem/1 var(--display); font-variant-numeric: tabular-nums; }
+
+/* Resultado */
+.ch-result { display: grid; justify-items: center; gap: .625rem; padding: 1.5rem 1rem 1.375rem; background: var(--sunk); border: 1px solid var(--line); border-top: .25rem solid var(--mc); }
+.ch-time { font: 900 4.25rem/.9 var(--display); font-stretch: 118%; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.ch-medal { display: flex; align-items: center; gap: .5rem; color: var(--mc); font: 800 .875rem/1.2 var(--display); letter-spacing: .14em; text-transform: uppercase; }
+.ch-medal .ch-ico svg { width: 1.375rem; height: 1.375rem; }
+.ch-table { margin-top: 1rem; }
+.ch-table div { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem .75rem; border-bottom: 1px solid var(--line); box-shadow: inset .1875rem 0 0 var(--mc, transparent); font-size: .875rem; }
+.ch-table span { display: flex; align-items: center; gap: .5rem; color: var(--ink-2); }
+.ch-table span svg { width: .875rem; height: .875rem; color: var(--ok); }
+.ch-table b { font: 800 .9375rem/1.2 var(--display); font-variant-numeric: tabular-nums; }
+.ch-table .got { background: rgba(255, 255, 255, .04); }
+.ch-table .got span { color: var(--ink); font-weight: 700; }
+.ch-table .prev { box-shadow: none; }
+
+@media (max-width: 720px) {
+  .ch-list { grid-template-columns: 1fr; }
+  .ch-hud .ch-name, .ch-hud .ch-pb { display: none; }
+  .ch-time { font-size: 3rem; }
+}

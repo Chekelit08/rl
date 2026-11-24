@@ -121,7 +121,7 @@ export class ReplayViewer implements ExtScreen {
     right.appendChild(button('Cerrar', 'tg-vbtn', () => this.close()));
     row.append(transport, this.speedRow, this.camRow, right);
     bar.append(tl, row);
-    const help = el('div', 'tg-vhelp', 'Espacio: pausa · ←/→: 5 s · −/+: velocidad · 0: director · 1–9: jugadores · C: pelota/auto · F: cámara libre (WASD, Q/E, clic derecho para mirar) · Esc: salir');
+    const help = el('div', 'tg-vhelp', 'Espacio: pausa · ← →: 5 s · − +: velocidad · 0: director · 1–9: jugadores · C: cámara de pelota o de auto · F: cámara libre (WASD, Q y E, clic derecho para mirar) · Esc: salir');
     this.progress = el('div', 'tg-vexport hidden');
     this.root.append(top, bar, help, this.progress);
     document.body.appendChild(this.root);
@@ -385,7 +385,7 @@ export class ReplayViewer implements ExtScreen {
     const d = new Date(this.meta.date);
     const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
     download(blob, `turbogol-${this.meta.kind}-${stamp}.webm`);
-    this.opts.toast(`🎞 Video exportado (${(blob.size / 1e6).toFixed(1)} MB${ex.rec.hasAudio ? ', con audio' : ''})`);
+    this.opts.toast(`Video exportado (${(blob.size / 1e6).toFixed(1)} MB${ex.rec.hasAudio ? ', con audio' : ''})`);
   }
 
   close() {
