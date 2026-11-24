@@ -29,15 +29,15 @@ export class ReplayLibrary {
   private build() {
     const p = this.panel;
     p.innerHTML = '';
-    p.appendChild(el('h2', '', 'Repeticiones y clips'));
-    const tabs = el('div', 'seg tg-tabs');
+    p.appendChild(el('header', 'panel-head', '<h2>Repeticiones</h2>'));
+    const tabs = el('div', 'tabs tg-tabs');
     for (const [k, label] of [['partido', 'Partidos'], ['clip', 'Clips']] as const) {
       tabs.appendChild(button(label, k === this.tab ? 'on' : '', () => { this.click(); this.tab = k; this.build(); }));
     }
     p.appendChild(tabs);
     p.appendChild(el('p', 'tip', this.tab === 'partido'
-      ? 'Los partidos se graban solos y se guardan al terminar (se conservan los últimos 10; los marcados con ★ no se borran).'
-      : 'Guardá un clip con <b>G</b> (o D-pad ↓) mientras jugás: se guardan los últimos 15 segundos.'));
+      ? 'Los partidos se graban solos. Quedan los últimos 10; los que marques con ★ no se borran nunca.'
+      : 'Apretá <kbd>G</kbd> mientras jugás (o R3 en el mando) y se guardan los últimos 15 segundos.'));
     this.list = el('div', 'tg-replays');
     this.list.textContent = 'Cargando…';
     p.appendChild(this.list);
@@ -67,22 +67,22 @@ export class ReplayLibrary {
   }
 
   private row(m: ReplayMeta) {
-    const r = el('div', 'tg-replay');
+    const r = el('div', 'card tg-replay');
     const score = m.kind === 'partido' || m.goals.length
-      ? `<span class="tg-score"><span class="b">${m.score[0]}</span>–<span class="r">${m.score[1]}</span></span>` : '';
+      ? `<span class="tg-score"><span class="b">${m.score[0]}</span><span class="r">${m.score[1]}</span></span>` : '<span class="tg-score clip">Jugada</span>';
     const result = m.kind === 'partido' ? (m.winner === -2 ? ' · sin terminar' : m.winner === 0 ? ' · victoria azul' : m.winner === 1 ? ' · victoria roja' : ' · empate') : '';
-    r.innerHTML =
+    r.innerHTML = score +
       `<div class="tg-replay-info"><b>${m.saved ? '★ ' : ''}${esc(m.title)}</b>` +
-      `<small>${fmtDate(m.date)} · ${esc(m.mode)} · ${fmtTime(m.duration)}${result}${m.goals.length ? ` · ${m.goals.length} gol${m.goals.length > 1 ? 'es' : ''}` : ''}</small></div>${score}`;
+      `<small>${fmtDate(m.date)} · ${esc(m.mode)} · ${fmtTime(m.duration)}${result}${m.goals.length ? ` · ${m.goals.length} gol${m.goals.length > 1 ? 'es' : ''}` : ''}</small></div>`;
     const act = el('div', 'tg-replay-actions');
     act.append(
       button('Ver', 'btn primary small', () => { this.click(); void this.ext.openViewer(m.id); }),
     );
     if (canExportVideo()) {
-      act.appendChild(button(m.kind === 'clip' ? 'Exportar WebM' : 'Video…', 'btn small', () => {
+      act.appendChild(button(m.kind === 'clip' ? 'Exportar video' : 'Video…', 'btn small', () => {
         this.click();
         if (m.kind === 'clip') void this.ext.openViewer(m.id, true);
-        else { this.ext.toast('Elegí el momento en el visor y tocá "Exportar"'); void this.ext.openViewer(m.id); }
+        else { this.ext.toast('Elegí el momento en el visor y tocá «Exportar»'); void this.ext.openViewer(m.id); }
       }));
     }
     act.append(

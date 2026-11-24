@@ -8,6 +8,7 @@ import { Ball, stepBall } from '../sim/ball.ts';
 import { BALL, DT } from '../sim/constants.ts';
 import { encodePack, upsertCustomPack } from './codes.ts';
 import { askText, button, confirmBox, copyText, el } from './dom.ts';
+import { fillRange } from '../ui/range.ts';
 import type { ExtScreen, Extras } from './extras.ts';
 import { aimAt } from './packs.ts';
 import { insideField, placeShot } from './session.ts';
@@ -255,6 +256,7 @@ export class ShotEditor implements ExtScreen {
     const shown = Math.abs(v) < 10 && v % 1 ? v.toFixed(1) : String(Math.round(v));
     if (document.activeElement !== f.input) f.input.value = shown;
     if (f.range && document.activeElement !== f.range) f.range.value = String(v);
+    if (f.range) fillRange(f.range);
   }
 
   private refresh() { for (const f of this.fields) this.setField(f); }

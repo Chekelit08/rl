@@ -10,6 +10,10 @@ import { getProfile, levelInfo, recordMatch, recordTier, type XpReport } from '.
 import { bestTier, botDifficultyFor, getRanked, PLAYLISTS, recordRanked, type Playlist, type RankedOutcome } from './progression/ranked.ts';
 import { pickMvp } from './ui/postmatch.ts';
 import { pointsFor } from './ui/points.ts';
+import { feedLine, scorePanel, setTurboHud } from './ui/hud.ts';
+import type { IconName } from './ui/icons.ts';
+import { fillRanges } from './ui/range.ts';
+import { bodyCards, refreshBodyThumbs } from './ui/thumbs.ts';
 import { UiManager } from './ui/ui.ts';
 import { DEFAULT_CAMERA, type CameraSettings } from './render/camera.ts';
 import { GameRenderer } from './render/renderer.ts';
@@ -23,13 +27,10 @@ import { Extras } from './training/extras.ts';
 import { type GameEvent, type MatchConfig, type Snapshot, World } from './sim/world.ts';
 import { DEFAULT_RULES, isDefaultRules, makeRules, MUTATORS, type Rules } from './sim/rules.ts';
 import { Challenges } from './challenges/challenges.ts';
-// Tipografía y tema visual: se cargan al final para pisar los estilos de cada módulo
-import '@fontsource-variable/archivo/wdth.css';
-import './theme.css';
 
 // ---------- Ajustes persistentes ----------
-interface Settings { camera: CameraSettings; volume: number; quality: QualityLevel; replays: boolean; bodyIndex: number; theme: Theme; mix: MixSettings }
-const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0, theme: 'dia', mix: { ...DEFAULT_MIX } };
+interface Settings { camera: CameraSettings; volume: number; quality: QualityLevel; replays: boolean; bodyIndex: number; theme: Theme; mix: MixSettings; hitbox: boolean }
+const DEFAULTS: Settings = { camera: { ...DEFAULT_CAMERA }, volume: 0.7, quality: 'alta', replays: true, bodyIndex: 0, theme: 'dia', mix: { ...DEFAULT_MIX }, hitbox: false };
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem('turbogol.settings');
@@ -122,6 +123,7 @@ class Game {
     const app = $('app');
     this.renderer = new GameRenderer(app, this.settings.camera, this.settings.theme);
     this.renderer.setQuality(this.settings.quality);
+    this.applyHitbox();
     this.input = new InputManager(app);
     this.audio.setVolume(this.settings.volume);
     this.audio.setMix(this.settings.mix);
@@ -191,7 +193,7 @@ class Game {
     this.history = [];
     this.acc = 0;
     this.replay = null;
-    $('replayBadge').classList.add('hidden');
+    this.setReplayHud(false);
     if (!attract) {
       this.lastCfg = cfg;
       this.lastDifficulty = difficulty;
@@ -390,8 +392,14 @@ class Game {
     this.replay = { frames: this.history.slice(start, end), t: 0, goalIndex: idx - start, focusId: this.world.lastGoal!.scorerId };
     this.state = 'replay';
     this.renderer.camCtl.resetDirector();
-    $('replayBadge').classList.remove('hidden');
+    this.setReplayHud(true);
     this.setCenter('');
+  }
+
+  /** Cartel de repetición y franjas de cine (los medidores se ocultan mientras dura). */
+  private setReplayHud(on: boolean) {
+    $('replayBadge').classList.toggle('hidden', !on);
+    $('hud').classList.toggle('replaying', on);
   }
 
   private stepReplay(dt: number, skip: boolean) {
@@ -406,7 +414,7 @@ class Game {
     this.renderer.render(snap, dt, 'replay', { x: 0, y: 0 }, r.focusId);
     if (skip || r.t * 120 >= r.frames.length - 2) {
       this.replay = null;
-      $('replayBadge').classList.add('hidden');
+      this.setReplayHud(false);
       this.renderer.camCtl.snapTo();
       this.world.setupKickoff();
       this.curSnap = this.world.snapshot();
@@ -439,28 +447,28 @@ class Game {
     if (ev.type === 'save') this.ui.chat.react('save', w.cars[ev.carId].team);
     switch (ev.type) {
       case 'flipreset': if (ev.carId === 0) this.toast('¡Flip reset!'); break;
-      case 'countdown': this.setCenter(String(ev.n), 'pop'); break;
-      case 'kickoff': this.setCenter('¡YA!', 'pop', 0.8); break;
+      case 'countdown': this.setCenter(String(ev.n), 'pop count'); break;
+      case 'kickoff': this.setCenter('¡Ya!', 'pop go', 0.8); break;
       case 'goal': {
         const scorer = ev.scorerId >= 0 ? w.cars[ev.scorerId] : null;
         const own = scorer && scorer.team !== ev.team;
-        this.setCenter('¡GOL!', 'pop goal' + ev.team, 2.8);
+        this.setCenter('¡Gol!', 'pop goal' + ev.team, 2.8);
         { const gf = $('goalFlash'); gf.className = ''; void gf.offsetWidth; gf.className = `go t${ev.team}`; }
         const kmh = Math.round(ev.speed * 0.036);
         $('subcenter').textContent = scorer ? `${scorer.name}${own ? ' (en contra)' : ''} · ${kmh} km/h` : `${kmh} km/h`;
-        this.feed(scorer ? `⚽ ${scorer.name} anotó para ${TEAM_NAMES[ev.team]}` : `⚽ ¡Gol de ${TEAM_NAMES[ev.team]}!`, ev.team);
-        if (ev.assistId >= 0) this.feed(`🤝 Asistencia de ${w.cars[ev.assistId].name}`, ev.team);
+        this.feed('ball', scorer ? `Gol de *${scorer.name}*${own ? ' en contra' : ''}` : `¡Gol de ${TEAM_NAMES[ev.team]}!`, ev.team);
+        if (ev.assistId >= 0) this.feed('assist', `Asistencia de *${w.cars[ev.assistId].name}*`, ev.team);
         this.updateScoreHud();
         break;
       }
       case 'demo': {
         const a = w.cars[ev.attacker], v = w.cars[ev.victim];
-        this.feed(`💥 ${a.name} demolió a ${v.name}`, a.team);
+        this.feed('demo', `*${a.name}* demolió a *${v.name}*`, a.team);
         break;
       }
-      case 'save': this.feed(`🧤 ¡Atajada de ${w.cars[ev.carId].name}!`, w.cars[ev.carId].team); break;
-      case 'shot': if (w.cfg.mode === 'match') this.feed(`🎯 Tiro de ${w.cars[ev.carId].name}`, w.cars[ev.carId].team); break;
-      case 'overtime': this.setCenter('TIEMPO EXTRA', 'pop', 2.5); break;
+      case 'save': this.feed('save', `¡Atajada de *${w.cars[ev.carId].name}*!`, w.cars[ev.carId].team); break;
+      case 'shot': if (w.cfg.mode === 'match') this.feed('shot', `Tiro de *${w.cars[ev.carId].name}*`, w.cars[ev.carId].team); break;
+      case 'overtime': this.setCenter('Tiempo extra', 'pop', 2.5); break;
     }
   }
 
@@ -475,15 +483,7 @@ class Game {
     if (!text) $('subcenter').textContent = '';
   }
 
-  private feed(text: string, team: number) {
-    const f = $('feed');
-    const d = document.createElement('div');
-    d.className = 'item t' + team;
-    d.textContent = text;
-    f.prepend(d);
-    while (f.children.length > 5) f.lastChild?.remove();
-    setTimeout(() => d.remove(), 6000);
-  }
+  private feed(kind: IconName, text: string, team: number) { feedLine(kind, text, team); }
 
   private toast(text: string) {
     const t = $('toast');
@@ -515,15 +515,7 @@ class Game {
 
     const me = w.cars[0];
     if (me && this.state !== 'menu') {
-      const b = Math.round(me.boost);
-      $('boostNum').textContent = String(b);
-      ($('boostRing') as unknown as SVGCircleElement).style.strokeDashoffset = String(235.62 * (1 - me.boost / 100));
-      const gauge = $('boostNum').parentElement!;
-      gauge.classList.toggle('low', me.boost < 15 && !me.unlimitedBoost);
-      gauge.classList.toggle('full', me.boost >= 100);
-      gauge.classList.toggle('super', me.supersonic);
-      $('speedChip').textContent = `${Math.round(me.speed() * 0.036)} km/h${me.supersonic ? ' · SUPERSÓNICO' : ''}`;
-      $('camChip').textContent = this.renderer.camCtl.ballCam ? 'CÁMARA: PELOTA' : 'CÁMARA: AUTO';
+      setTurboHud({ boost: me.boost, unlimited: me.unlimitedBoost, supersonic: me.supersonic, kmh: Math.round(me.speed() * 0.036), ballCam: this.renderer.camCtl.ballCam });
     }
     // El visor de repeticiones y el editor ('ext') suenan como una repetición
     this.audio.update(dt, this.curSnap, this.renderer.camera, this.state === 'ext' ? 'replay' : this.state, this.state === 'menu' ? -1 : 0);
@@ -537,11 +529,16 @@ class Game {
 
   private tabHeld = false;
 
-  private statsTable() {
+  /** Panel de puntajes (Tab). Sólo se vuelve a armar cuando cambia algo. */
+  private scoreKey = '';
+  private refreshScoreTable() {
     const w = this.world;
-    const rows = [...w.cars].sort((a, b) => a.team - b.team || b.stats.score - a.stats.score).map((c) =>
-      `<tr class="t${c.team}${c.id === 0 && !c.isBot ? ' me' : ''}"><td>${c.name}</td><td>${c.stats.score}</td><td>${c.stats.goals}</td><td>${c.stats.assists}</td><td>${c.stats.saves}</td><td>${c.stats.shots}</td><td>${c.stats.demos}</td><td>${c.stats.touches}</td></tr>`).join('');
-    return `<table class="stats"><tr><th>Jugador</th><th>Puntos</th><th>Goles</th><th>Asist.</th><th>Atajadas</th><th>Tiros</th><th>Demos</th><th>Toques</th></tr>${rows}</table>`;
+    const clock = w.cfg.mode === 'match' ? fmtClock(w.clock, w.overtime) : '∞';
+    const key = clock + '|' + w.score.join('-') + '|' + w.cars.map((c) => `${c.stats.score},${c.stats.goals},${c.stats.assists},${c.stats.saves},${c.stats.shots},${c.stats.demos},${c.stats.touches}`).join(';');
+    if (key === this.scoreKey) return;
+    this.scoreKey = key;
+    const me = w.cars[0] && !w.cars[0].isBot ? 0 : -1;
+    $('scoreTableInner').innerHTML = scorePanel(w.cars.map((c) => ({ id: c.id, name: c.name, team: c.team, isBot: c.isBot, stats: c.stats })), me, w.score, clock);
   }
 
   private showEnd() {
@@ -552,7 +549,7 @@ class Game {
       cars: w.cars.map((c) => ({ id: c.id, name: c.name, team: c.team, isBot: c.isBot, stats: c.stats })),
       score: [w.score[0], w.score[1]], winner: w.winner, myId: 0, myTeam: myTeam,
       label: this.ranked ? `Competitivo ${this.ranked.playlist}` : `Casual ${w.cfg.teamSize}v${w.cfg.teamSize}`,
-      xp: this.report.xp, ranked: this.report.ranked,
+      xp: this.report.xp, ranked: this.report.ranked, extra: this.ext.endButtons(),
     });
   }
 
@@ -560,7 +557,7 @@ class Game {
     this.ext.handleUi(ui);
     this.tabHeld = ui.scoreboard;
     if (ui.pause && this.ui.consumeEsc()) ui.pause = false;
-    if (ui.scoreboard) $('scoreTableInner').innerHTML = `<h2>Puntajes</h2>${this.statsTable()}`;
+    if (ui.scoreboard) this.refreshScoreTable();
     if (ui.chat >= 0 && this.state === 'playing' && this.world.cfg.mode === 'match') this.ui.chat.press(ui.chat);
     this.ui.chat.tick();
     if (ui.ballCamToggle && this.state === 'playing') this.renderer.camCtl.ballCam = !this.renderer.camCtl.ballCam;
@@ -568,6 +565,7 @@ class Game {
       if (this.state === 'playing') { this.state = 'paused'; this.showOnly('pause'); }
       else if (this.state === 'paused' && !$('pause').classList.contains('hidden')) { this.state = 'playing'; this.showOnly(null); }
       else if (!$('controls').classList.contains('hidden') || !$('settings').classList.contains('hidden')) this.back();
+      else if (this.state === 'menu' && (!$('setup').classList.contains('hidden') || this.challenges.menuOpen)) this.showOnly('menu');
     }
     if (ui.help && (this.state === 'playing' || this.state === 'paused')) {
       this.state = 'paused';
@@ -646,16 +644,13 @@ class Game {
     });
     // Carrocerías
     const bodies = $('bodies');
-    const descr = ['Equilibrado', 'Largo y bajo', 'Plano y ancho', 'Largo y fino', 'Híbrido', 'Alto, defensivo'];
-    CAR_BODIES.forEach((b, i) => {
-      const el = document.createElement('button');
-      el.innerHTML = `<b>${b.name}</b><small>${descr[i]}</small>`;
-      el.classList.toggle('on', i === getLoadout().body);
-      el.addEventListener('click', () => {
-        setLoadout({ body: i });
-        bodies.querySelectorAll('button').forEach((x, j) => x.classList.toggle('on', j === i));
-      });
-      bodies.appendChild(el);
+    bodies.innerHTML = bodyCards(getLoadout().body);
+    bodies.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-body]');
+      if (!b) return;
+      const i = Number(b.dataset.body);
+      setLoadout({ body: i });
+      bodies.querySelectorAll('[data-body]').forEach((x, j) => x.classList.toggle('on', j === i));
     });
   }
 
@@ -700,9 +695,14 @@ class Game {
 
   private openSetup(mode: 'match' | 'freeplay') {
     this.setupMode = mode;
-    $('setupTitle').textContent = mode === 'match' ? 'Partido vs bots' : 'Juego libre';
+    $('setupTitle').textContent = mode === 'match' ? 'Partido rápido' : 'Juego libre';
+    $('setupSub').textContent = mode === 'match' ? 'Contra bots. Elegí las reglas y tu auto.' : 'La cancha para vos solo, sin reloj ni rivales.';
+    $('setupTip').textContent = mode === 'match' ? '' : 'R reinicia la jugada, Z rebobina, F congela la pelota y V te la lanza.';
     for (const id of ['rowMode', 'rowDiff', 'rowTime']) $(id).classList.toggle('hidden', mode !== 'match');
     $('rowBoost').classList.toggle('hidden', mode !== 'freeplay');
+    // La selección y la pintura pueden haber cambiado en el garage
+    $('bodies').querySelectorAll('[data-body]').forEach((x, j) => x.classList.toggle('on', j === getLoadout().body));
+    refreshBodyThumbs($('bodies'));
     this.showOnly('setup');
   }
 
@@ -718,18 +718,25 @@ class Game {
       this.renderer.setQuality(this.settings.quality);
       this.screenClock = '';
     }
+    this.applyHitbox();
     saveSettings(this.settings);
+  }
+
+  /** Caja de choque visible (ayuda de entrenamiento). El dibujo lo hace el renderer, si lo trae. */
+  private applyHitbox() {
+    (this.renderer as GameRenderer & { setHitboxVisible?: (v: boolean) => void }).setHitboxVisible?.(this.settings.hitbox);
   }
 
   /** Pestaña abierta en Ajustes. */
   private settingsTab = 0;
   private static readonly SETTING_TABS: [string, string[]][] = [
-    ['Cámara', ['fov', 'distance', 'height', 'angle', 'stiffness', 'swivel', 'transition', 'shake']],
+    ['Cámara', ['shake', 'fov', 'distance', 'height', 'angle', 'stiffness', 'swivel', 'transition']],
     ['Audio', ['volume', 'mix-motor', 'mix-efectos', 'mix-publico', 'mix-musica', 'mix-ui', 'haptics']],
     ['Gráficos', ['quality', 'theme']],
-    ['Juego', ['replays']],
+    ['Juego', ['replays', 'hitbox']],
   ];
 
+  /** Arma la pestaña visible de Ajustes: deslizadores para los valores continuos y botones para las opciones. */
   private buildSliders() {
     const box = $('sliders');
     box.innerHTML = '';
@@ -743,40 +750,63 @@ class Game {
       tabs.appendChild(b);
     });
     box.appendChild(tabs);
-    const visible = Game.SETTING_TABS[this.settingsTab][1];
+    const [tabName, visible] = Game.SETTING_TABS[this.settingsTab];
+    // Lo que agregan otros módulos (dirección del servidor online) va sólo en "Juego"
+    $('settingsExtra').classList.toggle('hidden', tabName !== 'Juego');
     const cam = this.settings.camera;
-    const defs: [string, string, number, number, number, () => number, (v: number) => void, (v: number) => string][] = [
-      ['FOV', 'fov', 60, 110, 1, () => cam.fov, (v) => (cam.fov = v), (v) => String(v)],
-      ['Distancia', 'distance', 100, 400, 10, () => cam.distance, (v) => (cam.distance = v), (v) => String(v)],
-      ['Altura', 'height', 40, 200, 10, () => cam.height, (v) => (cam.height = v), (v) => String(v)],
-      ['Ángulo', 'angle', -15, 0, 1, () => cam.angle, (v) => (cam.angle = v), (v) => `${v}°`],
-      ['Rigidez', 'stiffness', 0, 1, 0.05, () => cam.stiffness, (v) => (cam.stiffness = v), (v) => v.toFixed(2)],
-      ['Giro (swivel)', 'swivel', 1, 10, 0.5, () => cam.swivel, (v) => (cam.swivel = v), (v) => v.toFixed(1)],
-      ['Transición', 'transition', 1, 2, 0.1, () => cam.transition, (v) => (cam.transition = v), (v) => v.toFixed(1)],
-      ['Sacudida', 'shake', 0, 1, 1, () => (cam.shake ? 1 : 0), (v) => (cam.shake = v === 1), (v) => (v ? 'Sí' : 'No')],
-      ['Volumen general', 'volume', 0, 1, 0.05, () => this.settings.volume, (v) => (this.settings.volume = v), (v) => `${Math.round(v * 100)}%`],
-      ...(['motor', 'efectos', 'publico', 'musica', 'ui'] as const).map((k): [string, string, number, number, number, () => number, (v: number) => void, (v: number) => string] =>
-        [{ motor: 'Motor', efectos: 'Efectos', publico: 'Público', musica: 'Música', ui: 'Interfaz' }[k], 'mix-' + k, 0, 1, 0.05, () => this.settings.mix[k], (v) => (this.settings.mix[k] = v), (v) => `${Math.round(v * 100)}%`]),
-      ['Vibración', 'haptics', 0, 1, 1, () => (this.settings.mix.haptics ? 1 : 0), (v) => (this.settings.mix.haptics = v === 1), (v) => (v ? 'Sí' : 'No')],
-      ['Calidad', 'quality', 0, 3, 1, () => QUALITY_LEVELS.indexOf(this.settings.quality), (v) => (this.settings.quality = QUALITY_LEVELS[v] ?? 'alta'), (v) => QUALITY_LABELS[QUALITY_LEVELS[v] ?? 'alta']],
-      ['Estadio', 'theme', 0, 1, 1, () => (this.settings.theme === 'dia' ? 0 : 1), (v) => (this.settings.theme = v ? 'noche' : 'dia'), (v) => (v ? 'Noche' : 'Día')],
-      ['Repeticiones', 'replays', 0, 1, 1, () => (this.settings.replays ? 1 : 0), (v) => (this.settings.replays = v === 1), (v) => (v ? 'Sí' : 'No')],
+    const mix = this.settings.mix;
+    const pct = (v: number) => `${Math.round(v * 100)}%`;
+    const yesNo = ['No', 'Sí'];
+    interface Def { key: string; label: string; hint?: string; get: () => number; set: (v: number) => void; range?: [number, number, number]; fmt?: (v: number) => string; options?: string[] }
+    const defs: Def[] = [
+      { key: 'shake', label: 'Sacudida', hint: 'Temblor en choques, goles y demoliciones', options: yesNo, get: () => (cam.shake ? 1 : 0), set: (v) => (cam.shake = v === 1) },
+      { key: 'fov', label: 'Campo de visión', hint: 'Cuánta cancha entra en pantalla', range: [60, 110, 1], fmt: (v) => `${v}°`, get: () => cam.fov, set: (v) => (cam.fov = v) },
+      { key: 'distance', label: 'Distancia', hint: 'Qué tan lejos del auto', range: [100, 400, 10], fmt: String, get: () => cam.distance, set: (v) => (cam.distance = v) },
+      { key: 'height', label: 'Altura', hint: 'Qué tan arriba del auto', range: [40, 200, 10], fmt: String, get: () => cam.height, set: (v) => (cam.height = v) },
+      { key: 'angle', label: 'Inclinación', hint: 'Cuánto mira hacia abajo', range: [-15, 0, 1], fmt: (v) => `${v}°`, get: () => cam.angle, set: (v) => (cam.angle = v) },
+      { key: 'stiffness', label: 'Firmeza', hint: 'Más alta: sigue al auto sin retraso', range: [0, 1, 0.05], fmt: (v) => v.toFixed(2), get: () => cam.stiffness, set: (v) => (cam.stiffness = v) },
+      { key: 'swivel', label: 'Velocidad de giro', hint: 'Qué tan rápido gira detrás del auto', range: [1, 10, 0.5], fmt: (v) => v.toFixed(1), get: () => cam.swivel, set: (v) => (cam.swivel = v) },
+      { key: 'transition', label: 'Cambio de cámara', hint: 'Rapidez al pasar de auto a pelota', range: [1, 2, 0.1], fmt: (v) => v.toFixed(1), get: () => cam.transition, set: (v) => (cam.transition = v) },
+      { key: 'volume', label: 'Volumen general', range: [0, 1, 0.05], fmt: pct, get: () => this.settings.volume, set: (v) => (this.settings.volume = v) },
+      ...(['motor', 'efectos', 'publico', 'musica', 'ui'] as const).map((k): Def => ({
+        key: 'mix-' + k, label: { motor: 'Motor', efectos: 'Efectos', publico: 'Público', musica: 'Música', ui: 'Interfaz' }[k], range: [0, 1, 0.05], fmt: pct, get: () => mix[k], set: (v) => (mix[k] = v),
+      })),
+      { key: 'haptics', label: 'Vibración', hint: 'En mandos que la tengan', options: yesNo, get: () => (mix.haptics ? 1 : 0), set: (v) => (mix.haptics = v === 1) },
+      { key: 'quality', label: 'Calidad', hint: 'Bajala si el juego va a los saltos', options: QUALITY_LEVELS.map((q) => QUALITY_LABELS[q]), get: () => QUALITY_LEVELS.indexOf(this.settings.quality), set: (v) => (this.settings.quality = QUALITY_LEVELS[v] ?? 'alta') },
+      { key: 'theme', label: 'Estadio', options: ['Día', 'Noche'], get: () => (this.settings.theme === 'dia' ? 0 : 1), set: (v) => (this.settings.theme = v ? 'noche' : 'dia') },
+      { key: 'replays', label: 'Repetición del gol', hint: 'Después de cada gol', options: yesNo, get: () => (this.settings.replays ? 1 : 0), set: (v) => (this.settings.replays = v === 1) },
+      { key: 'hitbox', label: 'Mostrar caja de choque', hint: 'Dibuja la caja con la que el auto toca la pelota', options: yesNo, get: () => (this.settings.hitbox ? 1 : 0), set: (v) => (this.settings.hitbox = v === 1) },
     ];
-    for (const [label, key, min, max, step, get, set, fmt] of defs) {
-      if (!visible.includes(key)) continue;
+    for (const key of visible) {
+      const d = defs.find((x) => x.key === key);
+      if (!d) continue;
       const row = document.createElement('div');
       row.className = 'slider';
-      row.innerHTML = `<label for="sl-${key}">${label}</label><input id="sl-${key}" type="range" min="${min}" max="${max}" step="${step}" value="${get()}"><output>${fmt(get())}</output>`;
-      const input = row.querySelector('input')!;
-      const out = row.querySelector('output')!;
-      input.addEventListener('input', () => {
-        const v = Number(input.value);
-        set(v);
-        out.textContent = fmt(v);
-        this.applySettings();
-      });
+      const label = `${d.label}${d.hint ? `<small>${d.hint}</small>` : ''}`;
+      if (d.options) {
+        row.innerHTML = `<label>${label}</label><div class="seg" id="sl-${d.key}" role="group" aria-label="${d.label}">${d.options.map((o, i) => `<button data-v="${i}" class="${i === d.get() ? 'on' : ''}">${o}</button>`).join('')}</div>`;
+        row.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => {
+          d.set(i);
+          this.audio.click();
+          row.querySelectorAll('button').forEach((x, j) => x.classList.toggle('on', j === i));
+          this.applySettings();
+        }));
+      } else {
+        const [min, max, step] = d.range!;
+        const fmt = d.fmt ?? String;
+        row.innerHTML = `<label for="sl-${d.key}">${label}</label><input id="sl-${d.key}" type="range" min="${min}" max="${max}" step="${step}" value="${d.get()}"><output>${fmt(d.get())}</output>`;
+        const input = row.querySelector('input')!;
+        const out = row.querySelector('output')!;
+        input.addEventListener('input', () => {
+          const v = Number(input.value);
+          d.set(v);
+          out.textContent = fmt(v);
+          this.applySettings();
+        });
+      }
       box.appendChild(row);
     }
+    fillRanges(box);
   }
 }
 

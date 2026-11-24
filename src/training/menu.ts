@@ -43,8 +43,7 @@ export class TrainingMenu {
   private build() {
     const p = this.panel;
     p.innerHTML = '';
-    p.appendChild(el('h2', '', 'Entrenamiento'));
-    p.appendChild(el('p', 'tip', 'Elegí un pack. Cada tiro arranca cuando te movés. <b>R</b> reintentar · <b>N</b>/<b>B</b> siguiente/anterior · mantené <b>Z</b> para rebobinar.'));
+    p.appendChild(el('header', 'panel-head', '<h2>Entrenamiento</h2><p class="sub">Elegí un pack: cada tiro arranca cuando te movés. <kbd>R</kbd> reintenta, <kbd>N</kbd> y <kbd>B</kbd> cambian de tiro y con <kbd>Z</kbd> apretada rebobinás.</p>'));
 
     // Filtros
     const filters = el('div', 'tg-filters');
@@ -56,11 +55,11 @@ export class TrainingMenu {
       }
       return s;
     };
+    const field = (label: string, control: HTMLElement) => { const f = el('div', 'field', `<span>${label}</span>`); f.appendChild(control); return f; };
     filters.append(
-      seg<ShotCategory>(['todas', ...CATEGORIES], CATEGORY_NAMES, lastCat, (v) => { lastCat = v; }),
-      seg<ShotDifficulty>(['todas', ...DIFFICULTIES], DIFFICULTY_LABELS, lastDiff, (v) => { lastDiff = v; }),
+      field('Posición', seg<ShotCategory>(['todas', ...CATEGORIES], CATEGORY_NAMES, lastCat, (v) => { lastCat = v; })),
+      field('Dificultad', seg<ShotDifficulty>(['todas', ...DIFFICULTIES], DIFFICULTY_LABELS, lastDiff, (v) => { lastDiff = v; })),
     );
-    p.appendChild(filters);
 
     // Opciones
     const opts = el('div', 'tg-opts');
@@ -78,7 +77,8 @@ export class TrainingMenu {
       toggle('Variación leve', () => this.ext.opts.variance, (v) => { this.ext.opts.variance = v; }),
       toggle('Turbo infinito', () => this.ext.opts.unlimitedBoost, (v) => { this.ext.opts.unlimitedBoost = v; }),
     );
-    p.appendChild(opts);
+    filters.appendChild(opts);
+    p.appendChild(filters);
 
     this.list = el('div', 'tg-packs');
     p.appendChild(this.list);
@@ -106,12 +106,12 @@ export class TrainingMenu {
       return;
     }
     for (const pk of all) {
-      const card = el('div', `tg-pack cat-${pk.category}`);
+      const card = el('div', `card tg-pack cat-${pk.category}`);
       const b = best[pk.id];
       card.innerHTML =
-        `<div class="tg-pack-head"><b>${esc(pk.name)}</b>${pk.official ? '<span class="tg-badge">OFICIAL</span>' : '<span class="tg-badge own">PROPIO</span>'}</div>` +
-        `<div class="tg-pack-meta">${CATEGORY_NAMES[pk.category]} · ${DIFFICULTY_LABELS[pk.difficulty]} · ${pk.shots.length} tiros · ${esc(pk.author)}` +
-        `${b !== undefined ? ` · <span class="tg-best">Mejor: ${b}/${pk.shots.length}</span>` : ''}</div>` +
+        `<div class="tg-pack-head"><b>${esc(pk.name)}</b>${pk.official ? '<span class="tag tg-badge">Oficial</span>' : '<span class="tag accent tg-badge own">Propio</span>'}</div>` +
+        `<div class="tg-pack-meta">${CATEGORY_NAMES[pk.category]} · ${DIFFICULTY_LABELS[pk.difficulty]} · ${pk.shots.length} tiros${pk.official ? '' : ` · ${esc(pk.author)}`}` +
+        `${b !== undefined ? ` · <span class="tg-best">Mejor: ${b} de ${pk.shots.length}</span>` : ''}</div>` +
         (pk.description ? `<div class="tg-pack-desc">${esc(pk.description)}</div>` : '');
       const row = el('div', 'tg-pack-actions');
       row.append(

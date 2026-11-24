@@ -528,13 +528,15 @@ export class Extras {
       this.rec.saved = { ...this.rec.saved, saved: true };
       await updateMeta(this.rec.saved);
     } else return;
-    this.toast('💾 Repetición guardada · Menú › Repeticiones');
+    this.toast('Repetición guardada · Menú › Repeticiones');
   }
 
+  /** Botones de repetición para el resumen de fin de partido (los ubica src/ui/postmatch.ts). */
+  endButtons(): HTMLElement | null { return this.endBox; }
+
   private addEndButtons() {
-    const actions = document.querySelector('#end .actions');
-    if (!actions || this.endBox) return;
-    const box = el('div', 'tg-endbtns');
+    if (this.endBox) return;
+    const box = el('div', 'tg-endbtns lead');
     box.append(
       button('Guardar repetición', 'btn', () => { this.g.audio.click(); void this.saveMatchNow(); }),
       button('Ver repetición', 'btn', async () => {
@@ -543,8 +545,9 @@ export class Extras {
         if (this.rec.saved) void this.openViewer(this.rec.saved.id);
       }),
     );
-    actions.prepend(box);
     this.endBox = box;
+    // Si el resumen ya está en pantalla se suman ahí; si no, los toma cuando se abre
+    document.querySelector('#end .actions')?.prepend(box);
   }
 
   async saveClip() {
@@ -585,7 +588,7 @@ export class Extras {
       saved: false,
       version: 1,
     };
-    this.toast(`🎬 Clip guardado (últimos ${Math.round(meta.duration)} s) · Menú › Repeticiones`);
+    this.toast(`Clip guardado: últimos ${Math.round(meta.duration)} s · Menú › Repeticiones`);
     try { await saveReplay(meta, frames); } catch { this.toast('No se pudo guardar el clip'); }
   }
 
