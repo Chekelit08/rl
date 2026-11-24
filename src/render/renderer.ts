@@ -389,6 +389,14 @@ export class GameRenderer {
     for (const c of cars) {
       const v = buildCar(CAR_BODIES[c.bodyIndex % CAR_BODIES.length], c.team, c.look);
       applyFlameColors(v, c.team);
+      // Caja de choque (oculta salvo que se pida en Ajustes)
+      const hbBody = CAR_BODIES[c.bodyIndex % CAR_BODIES.length];
+      const hb = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(hbBody.size[0], hbBody.size[1], hbBody.size[2])), this.hitboxMat);
+      hb.position.set(hbBody.offset[0], hbBody.offset[1], hbBody.offset[2]);
+      hb.renderOrder = 5;
+      hb.visible = this.hitboxVisible;
+      hb.userData.hitbox = true;
+      v.group.add(hb);
       this.scene.add(v.group);
       const np = document.createElement('div');
       np.className = 'nameplate team' + c.team;
@@ -543,7 +551,7 @@ export class GameRenderer {
     const b = snap.ball;
     this.ball.group.visible = !b.hidden;
     this.ball.group.position.set(b.x, b.y, b.z);
-    this.ball.mesh.quaternion.set(b.qx, b.qy, b.qz, b.qw);
+    this.spinBall(b, dt);
     const bspeed = Math.hypot(b.vx, b.vy, b.vz);
     (this.ball.glow.material as THREE.SpriteMaterial).opacity = this.theme === 'noche' ? 0.12 + Math.min(0.3, bspeed / 10000) : 0;
     // Sombra de la pelota: proyectada hacia abajo sobre la superficie
@@ -677,6 +685,41 @@ export class GameRenderer {
     else this.renderer.render(this.scene, this.camera);
     const inf = this.renderer.info.render;
     this.fps.tick(real, { calls: inf.calls, triangles: inf.triangles }, this.dynRes.scale, this.qualityLabel);
+  }
+
+  private ballSpin = new THREE.Vector3();
+  private ballQuat = new THREE.Quaternion();
+  private spinTmp = new THREE.Vector3();
+  private spinDq = new THREE.Quaternion();
+
+  /**
+   * Giro visible de la pelota. La simulación limita el giro a 6 rad/s (convención del género) y, por encima de
+   * unos 20 km/h, la pelota dibujada parecía patinar sobre el pasto. Para dibujarla, cuando va apoyada en el piso
+   * gira lo que corresponde a su velocidad (rodadura) y en el aire conserva el giro que traía. Es sólo visual.
+   */
+  private spinBall(b: Snapshot['ball'], dt: number) {
+    if (dt > 0) {
+      if (b.z < BALL.RADIUS + 6) {
+        // Rodadura pura sobre el piso: ω = n × v / R, con tope para que el dibujo no "titile" a velocidades muy altas
+        this.spinTmp.set(-b.vy / BALL.RADIUS, b.vx / BALL.RADIUS, 0).clampLength(0, 22);
+        this.ballSpin.lerp(this.spinTmp, 1 - Math.exp(-dt * 12));
+      } else this.ballSpin.multiplyScalar(Math.exp(-dt * 0.12));
+      const w = this.ballSpin.length();
+      if (w > 1e-3) {
+        this.spinDq.setFromAxisAngle(this.spinTmp.copy(this.ballSpin).multiplyScalar(1 / w), w * dt);
+        this.ballQuat.premultiply(this.spinDq).normalize();
+      }
+    }
+    this.ball.mesh.quaternion.copy(this.ballQuat);
+  }
+
+  private hitboxVisible = false;
+  private hitboxMat = new THREE.LineBasicMaterial({ color: '#ffc83d', transparent: true, opacity: 0.95, depthTest: false });
+
+  /** Muestra u oculta la caja de choque de cada auto (ayuda a entender dónde se le pega a la pelota). */
+  setHitboxVisible(v: boolean) {
+    this.hitboxVisible = v;
+    for (const c of this.cars.values()) c.group.traverse((o) => { if (o.userData.hitbox) o.visible = v; });
   }
 
   /** Llama, chispas y humo del turbo; `BoostStyle` personalizable por auto (this.boostStyles). */

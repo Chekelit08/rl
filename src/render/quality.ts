@@ -61,15 +61,17 @@ export class DynamicResolution {
     else if (fps > 59) { this.fastTime += dtReal; this.slowTime = 0; }
     else { this.slowTime = 0; this.fastTime = 0; }
     if (this.cooldown > 0) return false;
-    if (this.slowTime > 0.8 && this.scale > this.minScale) {
-      this.scale = Math.max(this.minScale, this.scale - (fps < 40 ? 0.15 : 0.08));
-      this.cooldown = 1.2;
+    // Cada cambio de escala recrea los buffers y se nota como un tirón: sólo se baja ante una caída sostenida
+    // y se vuelve a subir después de un buen rato estable, para no ir y venir.
+    if (this.slowTime > 2 && this.scale > this.minScale) {
+      this.scale = Math.max(this.minScale, this.scale - (fps < 40 ? 0.15 : 0.1));
+      this.cooldown = 5;
       this.slowTime = 0;
       return true;
     }
-    if (this.fastTime > 3 && this.scale < 1) {
-      this.scale = Math.min(1, this.scale + 0.05);
-      this.cooldown = 2;
+    if (this.fastTime > 12 && this.scale < 1) {
+      this.scale = Math.min(1, this.scale + 0.1);
+      this.cooldown = 8;
       this.fastTime = 0;
       return true;
     }

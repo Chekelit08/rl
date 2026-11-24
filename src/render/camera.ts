@@ -18,7 +18,7 @@ export interface CameraSettings {
 }
 
 export const DEFAULT_CAMERA: CameraSettings = {
-  fov: 110, distance: 270, height: 100, angle: -4, stiffness: 0.45, swivel: 4.5, transition: 1.2, shake: true,
+  fov: 100, distance: 270, height: 100, angle: -4, stiffness: 0.5, swivel: 3, transition: 1, shake: true,
 };
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -32,6 +32,7 @@ export class CameraController {
   private pos = new THREE.Vector3(0, -3000, 300);
   private look = new THREE.Vector3(0, 1, 0);
   private shakeAmt = 0;
+  private shakeT = 0;
   private initialized = false;
   /** Inclinación de la cámara de auto cuando se maneja por rampas y paredes. */
   private wallPitch = 0;
@@ -41,7 +42,8 @@ export class CameraController {
     this.settings = settings;
   }
 
-  shake(amount: number) { if (this.settings.shake) this.shakeAmt = Math.max(this.shakeAmt, amount); }
+  /** Sacudida breve y suave (gol, demolición). Está acotada: nunca desplaza la cámara más que unos centímetros. */
+  shake(amount: number) { if (this.settings.shake) this.shakeAmt = Math.max(this.shakeAmt, Math.min(16, amount * 0.28)); }
   snapTo() { this.initialized = false; }
 
   updateFov(aspect: number) {
@@ -75,8 +77,12 @@ export class CameraController {
     this.blend += ((useBall ? 1 : 0) - this.blend) * Math.min(1, dt * s.transition * 6);
     const targetYaw = carYaw + wrap(ballYaw - carYaw) * this.blend;
     if (!this.initialized) this.yaw = targetYaw;
-    const swivelRate = 1 - Math.exp(-dt * (2 + s.swivel * 2.2));
-    this.yaw = wrap(this.yaw + wrap(targetYaw - this.yaw) * swivelRate);
+    // Con la pelota pegada al auto, la dirección auto→pelota cambia de golpe: ahí la cámara gira más despacio,
+    // y siempre con un tope de velocidad de giro, para que no dé latigazos.
+    const near = Math.min(1, Math.max(0, (Math.hypot(toBall.x, toBall.y) - 140) / 520));
+    const swivelRate = 1 - Math.exp(-dt * (2 + s.swivel * 2.2) * (1 - 0.7 * this.blend * (1 - near)));
+    const maxTurn = 5.2 * dt;
+    this.yaw = wrap(this.yaw + Math.max(-maxTurn, Math.min(maxTurn, wrap(targetYaw - this.yaw) * swivelRate)));
 
     const yaw = this.yaw + lookX * Math.PI;
     // En paredes y rampas la cámara de auto acompaña la trompa (si no, el auto se va de cuadro al subir).
@@ -106,13 +112,13 @@ export class CameraController {
     const a = (s.angle * Math.PI) / 180 + this.wallPitch;
     const carLook = new THREE.Vector3(Math.cos(yaw) * Math.cos(a), Math.sin(yaw) * Math.cos(a), Math.sin(a));
     const ballLook = new THREE.Vector3(ball.x, ball.y, ball.z).sub(this.pos).normalize();
-    const pitch = Math.max(-0.45, Math.min(0.95, Math.asin(Math.max(-1, Math.min(1, ballLook.z)))));
+    const pitch = Math.max(-0.4, Math.min(0.8, Math.asin(Math.max(-1, Math.min(1, ballLook.z)))));
     const bh = Math.hypot(ballLook.x, ballLook.y) || 1;
     ballLook.set((ballLook.x / bh) * Math.cos(pitch), (ballLook.y / bh) * Math.cos(pitch), Math.sin(pitch));
     // La pelota pesa un poco menos que el auto en el encuadre vertical para que el auto no salga de pantalla
     ballLook.z = ballLook.z * 0.85 + Math.sin((s.angle * Math.PI) / 180) * 0.15;
     const lookDir = carLook.clone().lerp(ballLook, lookX ? 0 : this.blend).normalize();
-    this.look.lerp(lookDir, 1 - Math.exp(-dt * 14)).normalize();
+    this.look.lerp(lookDir, 1 - Math.exp(-dt * 9)).normalize();
 
     this.applyShake(dt);
     this.cam.lookAt(this.cam.position.clone().add(this.look));
@@ -229,11 +235,10 @@ export class CameraController {
     if (!b.hidden && toLine < 2300 && (vToward > 250 || toLine < 900)) want = 'goal';
     else if (b.z > 900 || (this.shot === 'chase' && this.shotTime > 7) || (this.shot === 'wide' && this.shotTime < 3.5)) want = 'wide';
     if (b.hidden) want = this.shot === 'goal' ? 'goal' : 'wide';
-    if (speed > 3800 && want === 'chase') want = 'low';
 
     this.shotTime += dt;
     let cut = false;
-    if (want !== this.shot && (this.shotTime > 1.6 || want === 'goal')) {
+    if (want !== this.shot && (this.shotTime > 2.8 || (want === 'goal' && this.shotTime > 1.2))) {
       if (want === 'wide') this.wideSide = (focus ? Math.sign(focus.x) : 1) >= 0 ? -1 : 1;
       this.shot = want;
       this.shotTime = 0;
@@ -261,20 +266,21 @@ export class CameraController {
         break;
       }
       case 'wide': {
-        desired.set(this.wideSide * 5600, Math.max(-5400, Math.min(5400, b.y * 0.85)), 2100);
+        desired.set(this.wideSide * 3850, Math.max(-3900, Math.min(3900, b.y * 0.8)), 1750);
         rate = 2.2;
         break;
       }
       case 'goal': {
-        desired.set(b.x * 0.3, side * 6650, 1150);
+        // Desde adentro de la cancha, por detrás de la jugada: se ve la pelota entrar y la red moverse
+        desired.set(b.x * 0.25, side * 3900, 820);
         rate = 2.5;
         break;
       }
     }
-    // Las cámaras de persecución no salen de la arena (las de tribuna y arco sí: miran a través del vidrio y la red)
-    if (this.shot === 'chase' || this.shot === 'low') {
+    // Ninguna cámara de repetición sale de la arena (desde afuera se veían el playón y la tribuna por detrás)
+    {
       const d = arenaDistance(desired.x, desired.y, desired.z);
-      if (d < 70) { const n = arenaNormal(desired.x, desired.y, desired.z); desired.add(new THREE.Vector3(n.x, n.y, n.z).multiplyScalar(70 - d)); }
+      if (d < 90) { const n = arenaNormal(desired.x, desired.y, desired.z); desired.add(new THREE.Vector3(n.x, n.y, n.z).multiplyScalar(90 - d)); }
     }
     if (cut || !this.initialized) { this.pos.copy(desired); this.initialized = true; this.look.copy(target.clone().sub(this.pos).normalize()); }
     else this.pos.lerp(desired, 1 - Math.exp(-rate * dt));
@@ -296,11 +302,14 @@ export class CameraController {
 
   private applyShake(dt: number) {
     this.cam.position.copy(this.pos);
-    if (this.shakeAmt > 0.01) {
-      this.cam.position.x += (Math.random() - 0.5) * this.shakeAmt;
-      this.cam.position.y += (Math.random() - 0.5) * this.shakeAmt;
-      this.cam.position.z += (Math.random() - 0.5) * this.shakeAmt;
-      this.shakeAmt *= Math.exp(-dt * 5);
-    }
+    if (this.shakeAmt > 0.05) {
+      // Vaivén suave (senos desfasados) en lugar de un salto al azar por cuadro, que se veía como temblor
+      this.shakeT += dt * 30;
+      const a = this.shakeAmt, t = this.shakeT;
+      this.cam.position.x += Math.sin(t) * 0.5 * a;
+      this.cam.position.y += Math.sin(t * 1.31 + 1.7) * 0.5 * a;
+      this.cam.position.z += Math.sin(t * 0.83 + 0.6) * 0.6 * a;
+      this.shakeAmt *= Math.exp(-dt * 6);
+    } else this.shakeAmt = 0;
   }
 }

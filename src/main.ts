@@ -35,6 +35,8 @@ function loadSettings(): Settings {
     const raw = localStorage.getItem('turbogol.settings');
     if (raw) {
       const s = JSON.parse(raw);
+      // Cámara: quien tenía los valores por defecto anteriores (más nerviosos) pasa a los nuevos
+      if (s.camera && s.camera.fov === 110 && s.camera.swivel === 4.5 && s.camera.stiffness === 0.45 && s.camera.transition === 1.2) delete s.camera;
       return { ...DEFAULTS, ...s, quality: normalizeQuality(s.quality), camera: { ...DEFAULT_CAMERA, ...(s.camera ?? {}) }, mix: { ...DEFAULT_MIX, ...(s.mix ?? {}) } };
     }
   } catch { /* almacenamiento no disponible */ }
