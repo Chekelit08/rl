@@ -205,11 +205,11 @@ button.bind:hover { background: var(--panel-3); border-color: var(--ink-2); }
 .gv-team { position: absolute; top: 1.25rem; right: 1.5rem; display: flex; align-items: center; gap: .75rem; }
 .gv-team > span { color: #3a4354; font: 700 .6875rem/1.2 var(--display); letter-spacing: .16em; text-transform: uppercase; }
 .gv-team .seg button { background: rgba(16, 20, 28, .92); }
-.gv-label { position: absolute; left: 2.25rem; bottom: 2rem; display: grid; gap: .375rem; color: #10141c; pointer-events: none; }
+.gv-label { position: absolute; left: 2.25rem; right: 2.25rem; bottom: 2rem; display: grid; gap: .375rem; color: #10141c; pointer-events: none; }
 .gv-label small { display: flex; align-items: center; gap: .5rem; font: 700 .71875rem/1.2 var(--display); letter-spacing: .2em; text-transform: uppercase; }
 .gv-label small::before { content: ''; width: .5rem; height: .5rem; background: var(--accent); box-shadow: 0 0 0 1px rgba(0, 0, 0, .25); }
-.gv-label b { font: 900 3.5rem/.9 var(--display); font-stretch: 125%; letter-spacing: -.035em; text-transform: uppercase; transform: skewX(-9deg); transform-origin: left bottom; }
-.gv-hint { position: absolute; right: 1.5rem; bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; color: #3a4354; font-size: .78125rem; font-weight: 600; pointer-events: none; }
+.gv-label b { font: 900 3.25rem/.92 var(--display); font-stretch: 125%; letter-spacing: -.035em; text-transform: uppercase; transform: skewX(-9deg); transform-origin: left bottom; }
+.gv-hint { position: absolute; left: 2.25rem; top: 1.75rem; color: #3a4354; font-size: .78125rem; font-weight: 600; pointer-events: none; }
 
 @media (max-width: 900px) {
   .rk-grid, .pf-cols, .rm-body, .pm-cols { grid-template-columns: 1fr; }
