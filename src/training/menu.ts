@@ -102,7 +102,7 @@ export class TrainingMenu {
     const all = [...OFFICIAL_PACKS, ...custom].filter((pk) => (lastCat === 'todas' || pk.category === lastCat) && (lastDiff === 'todas' || pk.difficulty === lastDiff));
     this.list.innerHTML = '';
     if (!all.length) {
-      this.list.appendChild(el('p', 'tip', 'No hay packs con estos filtros. Creá uno o importá un código.'));
+      this.list.appendChild(el('p', 'tip tg-empty', 'No hay packs con estos filtros. Creá uno o importá un código.'));
       return;
     }
     for (const pk of all) {

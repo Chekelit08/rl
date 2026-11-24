@@ -58,7 +58,8 @@ body.tg-training #center, body.tg-training #subcenter { display: none; }
 .tg-toggle.on::before { background: var(--accent); }
 .tg-toggle.on b { color: var(--accent); }
 .tg-packs { display: grid; grid-template-columns: 1fr 1fr; gap: .625rem; }
-.tg-replays { display: grid; gap: .5rem; }
+.tg-replays { display: grid; gap: .5rem; margin-top: .75rem; }
+.tg-empty { grid-column: 1 / -1; padding: 1rem; background: var(--sunk); border: 1px dashed var(--line-2); }
 .tg-pack { display: flex; flex-direction: column; gap: .25rem; padding: .875rem 1rem 1rem; border-left: .1875rem solid var(--blue); }
 .tg-pack.cat-arquero { border-left-color: var(--ok); }
 .tg-pack.cat-aereo { border-left-color: var(--accent); }
@@ -136,7 +137,6 @@ body.tg-training #center, body.tg-training #subcenter { display: none; }
 .tg-editor .tg-num { margin: 0; padding: .1875rem .375rem; font-variant-numeric: tabular-nums; text-align: right; }
 .tg-ed-tip { margin: .375rem 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .tg-ed-actions { position: sticky; bottom: -1.125rem; display: grid; grid-template-columns: 1fr 1fr; gap: .375rem; margin: 1rem -1.125rem -1.125rem; padding: .75rem 1.125rem; background: var(--panel); border-top: 1px solid var(--line); }
-.tg-ed-actions + .tg-ed-tip { display: none; }
 
 @media (max-width: 900px) {
   .tg-packs { grid-template-columns: 1fr; }

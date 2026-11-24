@@ -218,8 +218,8 @@ export class ShotEditor implements ExtScreen {
       button('Compartir', 'btn small', () => void this.share()),
       button('Salir', 'btn small', () => void this.exit()),
     );
+    p.appendChild(el('p', 'tg-ed-tip', 'Cámara: WASD para moverte, Q y E para bajar y subir, Shift para ir rápido y clic derecho para mirar.'));
     p.appendChild(actions);
-    p.appendChild(el('p', 'tg-ed-tip', 'Cámara: WASD, Q/E bajar/subir, Shift rápido, clic derecho + mouse para mirar.'));
   }
 
   private label(t: string) { return el('div', 'tg-ed-label', t); }

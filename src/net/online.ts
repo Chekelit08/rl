@@ -244,6 +244,9 @@ export class OnlineMode {
     this.host.showOnly('menu');
   }
 
+  /** true si está abierta la pantalla de inicio del online (sin sala): Esc la cierra desde main.ts. */
+  get atHome() { return !this.active && this.screen === 'home'; }
+
   private me(): LobbyPlayer | undefined { return this.room?.players.find((p) => p.id === this.room!.you); }
 
   // ---------- Partido ----------

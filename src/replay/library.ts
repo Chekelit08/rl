@@ -61,7 +61,7 @@ export class ReplayLibrary {
     const items = await listReplays(this.tab);
     this.list.innerHTML = '';
     if (!items.length) {
-      this.list.appendChild(el('p', 'tip', this.tab === 'partido' ? 'Todavía no hay partidos grabados. Jugá uno contra los bots.' : 'Todavía no guardaste clips.'));
+      this.list.appendChild(el('p', 'tip tg-empty', this.tab === 'partido' ? 'Todavía no hay partidos grabados. Jugá uno contra los bots y aparece acá.' : 'Todavía no guardaste ningún clip.'));
       return;
     }
     for (const m of items) this.list.appendChild(this.row(m));

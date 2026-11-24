@@ -234,7 +234,7 @@ button.bind:hover { background: var(--panel-3); border-color: var(--ink-2); }
   .qchat-menu { bottom: 11rem; }
   .overlay.garage { flex-direction: column-reverse; }
   .garage-panel { width: 100%; height: 58%; border-right: 0; border-top: 1px solid var(--line); }
-  .gv-main { grid-template-columns: 7rem minmax(0, 1fr); }
-  .gv-label b { font-size: 2rem; }
-  .gv-hint, .gv-team > span { display: none; }
+  .gv-main { grid-template-columns: 8.5rem minmax(0, 1fr); }
+  .gv-tabs button { padding-left: .875rem; letter-spacing: .1em; }
+  .gv-label, .gv-hint, .gv-team > span { display: none; }
 }

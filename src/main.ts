@@ -566,6 +566,7 @@ class Game {
       else if (this.state === 'paused' && !$('pause').classList.contains('hidden')) { this.state = 'playing'; this.showOnly(null); }
       else if (!$('controls').classList.contains('hidden') || !$('settings').classList.contains('hidden')) this.back();
       else if (this.state === 'menu' && (!$('setup').classList.contains('hidden') || this.challenges.menuOpen)) this.showOnly('menu');
+      else if (this.state === 'menu' && this.online.atHome) this.online.exit();
     }
     if (ui.help && (this.state === 'playing' || this.state === 'paused')) {
       this.state = 'paused';
@@ -652,6 +653,8 @@ class Game {
       setLoadout({ body: i });
       bodies.querySelectorAll('[data-body]').forEach((x, j) => x.classList.toggle('on', j === i));
     });
+    // Las miniaturas se preparan con el menú en reposo, así ya están cuando se abre la pantalla
+    if (!navigator.webdriver) setTimeout(() => refreshBodyThumbs(bodies), 2500);
   }
 
   // ---------- Mutadores ----------
