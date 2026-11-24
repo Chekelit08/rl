@@ -121,7 +121,7 @@ export class ReplayViewer implements ExtScreen {
     right.appendChild(button('Cerrar', 'tg-vbtn', () => this.close()));
     row.append(transport, this.speedRow, this.camRow, right);
     bar.append(tl, row);
-    const help = el('div', 'tg-vhelp', 'Espacio: pausa · ←/→: 5 s · −/+: velocidad · 0: director · 1–9: jugadores · C: pelota/auto · F: cámara libre (WASD, Q/E, clic derecho para mirar) · Esc: salir');
+    const help = el('div', 'tg-vhelp', 'Espacio: pausa · ← →: 5 s · − +: velocidad · 0: director · 1–9: jugadores · C: cámara de pelota o de auto · F: cámara libre (WASD, Q y E, clic derecho para mirar) · Esc: salir');
     this.progress = el('div', 'tg-vexport hidden');
     this.root.append(top, bar, help, this.progress);
     document.body.appendChild(this.root);
