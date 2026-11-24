@@ -100,8 +100,8 @@ function pump() {
 }
 
 /** Tarjetas de las seis carrocerías. La miniatura se completa sola con `refreshBodyThumbs`. */
-export function bodyCards(selected: number, team = 0, attr = 'data-body'): string {
-  return CAR_BODIES.map((b, i) => `<button class="card body-card${i === selected ? ' on' : ''}" ${attr}="${i}"><img class="thumb" data-thumb="${i}" data-team="${team}" alt=""><b>${b.name}</b><small>${BODY_DESC[i] ?? ''}</small></button>`).join('');
+export function bodyCards(selected: number, team = 0, attr = 'data-body', cls = ''): string {
+  return CAR_BODIES.map((b, i) => `<button class="card body-card${cls ? ' ' + cls : ''}${i === selected ? ' on' : ''}" ${attr}="${i}"><img class="thumb" data-thumb="${i}" data-team="${team}" alt=""><b>${b.name}</b><small>${BODY_DESC[i] ?? ''}</small></button>`).join('');
 }
 
 /** Pone las miniaturas que ya existen y encarga las que falten para el aspecto actual del auto. */

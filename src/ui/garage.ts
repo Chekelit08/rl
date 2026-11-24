@@ -330,7 +330,7 @@ export class Garage {
     let body = '';
     switch (this.tab) {
       case 'Carrocería':
-        body = `<div class="bodies">${bodyCards(lo.body, this.team, 'data-set="body" data-v')}</div>
+        body = `<div class="bodies">${bodyCards(lo.body, this.team, 'data-set="body" data-v', 'gi')}</div>
           <p class="tip">Cada carrocería tiene su forma y su caja de choque. Probalas y quedate con la que mejor te resulte.</p>`;
         break;
       case 'Pintura': {
