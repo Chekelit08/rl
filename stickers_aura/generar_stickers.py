@@ -112,53 +112,74 @@ def fill_rect(img, box, color):
 
 
 
-# ---- números en bloque estilo college (como los del diseño): esquinas cortadas a 45°
-DW, DH, T, V, CH = 100, 180, 28, 34, 15
-MID = (76, 104)
-def _digit_rects(d):
+# ---- números en bloque calcados del "3" del diseño original (medidas tomadas del 3 de ChatGPT)
+DW, DH = 100, 203
+HB, VS = 31, 27          # grosor barras horizontales / verticales
+M0, M1 = 84, 112         # barra del medio
+EAR = 46                 # largo de las "orejas" (puntas cortas)
+C = 20                   # chaflán de esquinas exteriores
+NOTCH = 10               # muesca en V del costado (como el 3)
+
+def _glyph(d):
     W, H = DW, DH
-    top = (0, 0, W, T); bot = (0, H - T, W, H); mid = (0, MID[0], W, MID[1])
-    L = (0, 0, V, H); R = (W - V, 0, W, H)
-    Lu = (0, 0, V, MID[1]); Ll = (0, MID[0], V, H); Ru = (W - V, 0, W, MID[1]); Rl = (W - V, MID[0], W, H)
-    earLt = (0, 0, V, 54); earLb = (0, H - 54, V, H); earRt = (W - V, 0, W, 54)
-    return {
-        '0': [top, bot, L, R],
-        '1': [(30, 0, 30 + V + 4, H), (8, 0, 34, T + 6)],
-        '2': [top, Ru, mid, Ll, bot, earLt],
-        '3': [top, (22, MID[0], W, MID[1]), bot, R, earLt, earLb],
-        '4': [(0, 0, V, 118), (0, 90, W, 118), (W - V, 0, W, H)],
-        '5': [top, Lu, mid, Rl, bot, earLb],
-        '6': [top, L, mid, Rl, bot, earRt],
-        '7': [top, (W - V, 0, W, H), earLt],
-        '8': [top, bot, L, R, mid],
-        '9': [top, Lu, mid, R, bot, earLb],
-    }[d]
+    R = []; cuts = []; vs = []
+    top = (0, 0, W, HB); bot = (0, H - HB, W, H)
+    L = (0, 0, VS, H); Rr = (W - VS, 0, W, H)
+    std = [(0, 0, -1, -1), (W, 0, 1, -1), (0, H, -1, 1), (W, H, 1, 1)]
+    if d == '0': R = [top, bot, L, Rr]; cuts = std
+    elif d == '1':
+        R = [(36, 0, 36 + VS, H), (12, 0, 36 + VS, HB)]; cuts = [(12, 0, -1, -1), (36 + VS, 0, 1, -1), (36, H, -1, 1), (36 + VS, H, 1, 1)]
+        cuts = [(12, 0, -1, -1), (36 + VS, 0, 1, -1, 8), (36, H, -1, 1, 8), (36 + VS, H, 1, 1, 8)]
+    elif d == '2':
+        R = [top, (0, 0, VS, EAR), (W - VS, 0, W, M1), (0, M0, W, M1), (0, M0, VS, H), bot]
+        cuts = std + [(W, M1, 1, 1)]
+    elif d == '3':
+        R = [top, (0, 0, VS, EAR), (29, M0, W, M1), Rr, (0, H - EAR, VS, H), bot]
+        cuts = std; vs = ['R']
+    elif d == '4':
+        R = [(0, 0, VS, 130), (0, 102, W, 130), (60, 0, 60 + VS, H)]
+        cuts = [(0, 0, -1, -1), (60 + VS, 0, 1, -1, 8), (0, 130, -1, 1, 8), (60, H, -1, 1, 8), (60 + VS, H, 1, 1, 8)]
+    elif d == '5':
+        R = [top, (0, 0, VS, M1), (0, M0, W, M1), (W - VS, M0, W, H), bot, (0, H - EAR, VS, H)]
+        cuts = std + [(W, M0, 1, -1)]
+    elif d == '6':
+        R = [top, (W - VS, 0, W, EAR), L, (0, M0, W, M1), (W - VS, M0, W, H), bot]
+        cuts = std + [(W, M0, 1, -1)]
+    elif d == '7':
+        R = [top, (0, 0, VS, EAR), (W - VS, 0, W, H)]
+        cuts = [(0, 0, -1, -1), (W, 0, 1, -1), (W - VS, H, -1, 1, 8), (W, H, 1, 1, 8)]
+    elif d == '8':
+        R = [top, bot, L, Rr, (0, M0, W, M1)]; cuts = std; vs = ['L', 'R']
+    elif d == '9':
+        R = [top, (0, 0, VS, M1), (0, M0, W, M1), Rr, bot, (0, H - EAR, VS, H)]
+        cuts = std + [(0, M1, -1, 1)]
+    return R, cuts, vs
 
 def number_mask(txt, h, max_w):
-    k = 8  # escala de dibujo
-    gap = 12
-    widths = [(68 if ch == '1' else DW) for ch in txt]
-    total = sum(widths) + gap * (len(txt) - 1)
-    im = Image.new('L', (total * k, DH * k), 0)
-    d = ImageDraw.Draw(im)
-    x = 0
-    for ch, w in zip(txt, widths):
+    k = 8
+    gap = 14
+    imgs = []
+    for ch in txt:
         g = Image.new('L', (DW * k, DH * k), 0); gd = ImageDraw.Draw(g)
-        for (a, b, c_, e) in _digit_rects(ch):
+        R, cuts, vs = _glyph(ch)
+        for (a, b, c_, e) in R:
             gd.rectangle([a * k, b * k, c_ * k - 1, e * k - 1], fill=255)
+        for cut in cuts:
+            x, y, dx, dy = cut[:4]; cc = cut[4] if len(cut) > 4 else C
+            gd.polygon([(x * k, y * k), ((x - dx * cc) * k, y * k), (x * k, (y - dy * cc) * k)], fill=0)
+        mid = (M0 + M1) / 2
+        for side in vs:
+            if side == 'R':
+                gd.polygon([(DW * k, (M0 - 3) * k), ((DW - NOTCH) * k, mid * k), (DW * k, (M1 + 3) * k)], fill=0)
+            else:
+                gd.polygon([(0, (M0 - 3) * k), (NOTCH * k, mid * k), (0, (M1 + 3) * k)], fill=0)
         bb = g.getbbox()
-        # chaflanes en las 4 esquinas exteriores
-        x0, y0, x1, y1 = bb; c = CH * k
-        for tri in [[(x0, y0), (x0 + c, y0), (x0, y0 + c)], [(x1, y0), (x1 - c, y0), (x1, y0 + c)],
-                    [(x0, y1), (x0 + c, y1), (x0, y1 - c)], [(x1, y1), (x1 - c, y1), (x1, y1 - c)]]:
-            gd.polygon(tri, fill=0)
-        if ch == '1':
-            g = g.crop((bb[0], 0, bb[0] + w * k, DH * k))
-        else:
-            g = g.crop((0, 0, w * k, DH * k))
-        im.paste(g, (x * k, 0))
-        x += w + gap
-    im = im.crop(im.getbbox())
+        imgs.append(g.crop((bb[0], 0, bb[2], DH * k)))
+    total = sum(i.width for i in imgs) + gap * k * (len(imgs) - 1)
+    im = Image.new('L', (total, DH * k), 0)
+    x = 0
+    for i in imgs:
+        im.paste(i, (x, 0)); x += i.width + gap * k
     sc = h / im.height
     wpx = im.width * sc
     sx = min(1.0, max_w / wpx)
@@ -177,8 +198,8 @@ def espalda_negra(num, name):
     fill_rect(im, (406, 472, 680, 952), BLACK)
     nm = text_mask(name, s(73), s(400))
     paste_layers(im, nm, s(CX), s(349), [(WHITE, 0)])
-    nb = number_mask(str(num), s(459 if num < 10 else 430), s(400))
-    box = paste_layers(im, nb, s(CX), s(482 if num < 10 else 496), [(WHITE, s(10)), (BLACK, s(5)), (WHITE, 0)])
+    nb = number_mask(str(num), s(448 if num < 10 else 420), s(460))
+    box = paste_layers(im, nb, s(CX), s(490 if num < 10 else 504), [(WHITE, s(13)), (BLACK, s(7)), (WHITE, 0)])
     add_adidas(im, box, BLACK, s(24))
     return im
 
@@ -189,8 +210,8 @@ def espalda_blanca(num, name):
     im = restore_cols(im, (420, 515, 672, 962), (985, 1030))
     nm = text_mask(name, s(74), s(400))
     paste_layers(im, nm, s(CX), s(416), [(WHITE, s(7)), (INK, 0)])
-    nb = number_mask(str(num), s(408 if num < 10 else 385), s(370))
-    box = paste_layers(im, nb, s(CX), s(538 if num < 10 else 550), [(WHITE, s(16)), (INK, s(10)), (WHITE, s(5)), (INK, 0)])
+    nb = number_mask(str(num), s(384 if num < 10 else 364), s(420))
+    box = paste_layers(im, nb, s(CX), s(548 if num < 10 else 558), [(WHITE, s(19)), (INK, s(12)), (WHITE, s(6)), (INK, 0)])
     add_adidas(im, box, WHITE, s(22))
     return im
 
@@ -198,8 +219,8 @@ def espalda_blanca(num, name):
 def frente_bastones(num, name):
     im = load('10.webp')
     im = restore_cols(im, (484, 526, 606, 730), (735, 760))
-    nb = number_mask(str(num), s(177 if num < 10 else 145), s(156))
-    paste_layers(im, nb, s(545), s(539 if num < 10 else 555), [(INK, s(5)), (WHITE, 0)])
+    nb = number_mask(str(num), s(177 if num < 10 else 150), s(160))
+    paste_layers(im, nb, s(545), s(539 if num < 10 else 552), [(INK, s(5)), (WHITE, 0)])
     return im
 
 
