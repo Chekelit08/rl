@@ -111,6 +111,59 @@ def fill_rect(img, box, color):
     return img
 
 
+
+# ---- números en bloque estilo college (como los del diseño): esquinas cortadas a 45°
+DW, DH, T, V, CH = 100, 180, 28, 34, 15
+MID = (76, 104)
+def _digit_rects(d):
+    W, H = DW, DH
+    top = (0, 0, W, T); bot = (0, H - T, W, H); mid = (0, MID[0], W, MID[1])
+    L = (0, 0, V, H); R = (W - V, 0, W, H)
+    Lu = (0, 0, V, MID[1]); Ll = (0, MID[0], V, H); Ru = (W - V, 0, W, MID[1]); Rl = (W - V, MID[0], W, H)
+    earLt = (0, 0, V, 54); earLb = (0, H - 54, V, H); earRt = (W - V, 0, W, 54)
+    return {
+        '0': [top, bot, L, R],
+        '1': [(30, 0, 30 + V + 4, H), (8, 0, 34, T + 6)],
+        '2': [top, Ru, mid, Ll, bot, earLt],
+        '3': [top, (22, MID[0], W, MID[1]), bot, R, earLt, earLb],
+        '4': [(0, 0, V, 118), (0, 90, W, 118), (W - V, 0, W, H)],
+        '5': [top, Lu, mid, Rl, bot, earLb],
+        '6': [top, L, mid, Rl, bot, earRt],
+        '7': [top, (W - V, 0, W, H), earLt],
+        '8': [top, bot, L, R, mid],
+        '9': [top, Lu, mid, R, bot, earLb],
+    }[d]
+
+def number_mask(txt, h, max_w):
+    k = 8  # escala de dibujo
+    gap = 12
+    widths = [(68 if ch == '1' else DW) for ch in txt]
+    total = sum(widths) + gap * (len(txt) - 1)
+    im = Image.new('L', (total * k, DH * k), 0)
+    d = ImageDraw.Draw(im)
+    x = 0
+    for ch, w in zip(txt, widths):
+        g = Image.new('L', (DW * k, DH * k), 0); gd = ImageDraw.Draw(g)
+        for (a, b, c_, e) in _digit_rects(ch):
+            gd.rectangle([a * k, b * k, c_ * k - 1, e * k - 1], fill=255)
+        bb = g.getbbox()
+        # chaflanes en las 4 esquinas exteriores
+        x0, y0, x1, y1 = bb; c = CH * k
+        for tri in [[(x0, y0), (x0 + c, y0), (x0, y0 + c)], [(x1, y0), (x1 - c, y0), (x1, y0 + c)],
+                    [(x0, y1), (x0 + c, y1), (x0, y1 - c)], [(x1, y1), (x1 - c, y1), (x1, y1 - c)]]:
+            gd.polygon(tri, fill=0)
+        if ch == '1':
+            g = g.crop((bb[0], 0, bb[0] + w * k, DH * k))
+        else:
+            g = g.crop((0, 0, w * k, DH * k))
+        im.paste(g, (x * k, 0))
+        x += w + gap
+    im = im.crop(im.getbbox())
+    sc = h / im.height
+    wpx = im.width * sc
+    sx = min(1.0, max_w / wpx)
+    return im.resize((max(1, int(round(wpx * sx))), int(round(h))), Image.LANCZOS)
+
 # ----------------------------------------------------------------- vistas
 BLACK = (12, 12, 12)
 WHITE = (250, 250, 250)
@@ -124,8 +177,8 @@ def espalda_negra(num, name):
     fill_rect(im, (406, 472, 680, 952), BLACK)
     nm = text_mask(name, s(73), s(400))
     paste_layers(im, nm, s(CX), s(349), [(WHITE, 0)])
-    nb = text_mask(str(num), s(459), s(330 if num >= 10 else 260))
-    box = paste_layers(im, nb, s(CX), s(482), [(WHITE, s(10)), (BLACK, s(5)), (WHITE, 0)])
+    nb = number_mask(str(num), s(459 if num < 10 else 430), s(400))
+    box = paste_layers(im, nb, s(CX), s(482 if num < 10 else 496), [(WHITE, s(10)), (BLACK, s(5)), (WHITE, 0)])
     add_adidas(im, box, BLACK, s(24))
     return im
 
@@ -136,8 +189,8 @@ def espalda_blanca(num, name):
     im = restore_cols(im, (420, 515, 672, 962), (985, 1030))
     nm = text_mask(name, s(74), s(400))
     paste_layers(im, nm, s(CX), s(416), [(WHITE, s(7)), (INK, 0)])
-    nb = text_mask(str(num), s(408), s(310 if num >= 10 else 222))
-    box = paste_layers(im, nb, s(CX), s(538), [(WHITE, s(16)), (INK, s(10)), (WHITE, s(5)), (INK, 0)])
+    nb = number_mask(str(num), s(408 if num < 10 else 385), s(370))
+    box = paste_layers(im, nb, s(CX), s(538 if num < 10 else 550), [(WHITE, s(16)), (INK, s(10)), (WHITE, s(5)), (INK, 0)])
     add_adidas(im, box, WHITE, s(22))
     return im
 
@@ -145,8 +198,8 @@ def espalda_blanca(num, name):
 def frente_bastones(num, name):
     im = load('10.webp')
     im = restore_cols(im, (484, 526, 606, 730), (735, 760))
-    nb = text_mask(str(num), s(170), s(120 if num >= 10 else 86))
-    paste_layers(im, nb, s(545), s(542), [(INK, s(5)), (WHITE, 0)])
+    nb = number_mask(str(num), s(177 if num < 10 else 145), s(156))
+    paste_layers(im, nb, s(545), s(539 if num < 10 else 555), [(INK, s(5)), (WHITE, 0)])
     return im
 
 
